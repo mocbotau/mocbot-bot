@@ -144,7 +144,7 @@ class Commands(commands.Cog):
             discord.ui.Button(
                 label="Setup",
                 style=discord.ButtonStyle.link,
-                url=f"https://mocbot.masterofcubesau.com/{interaction.guild.id}/manage",
+                url=f"{self.bot.WEBSITE_BASE_URL}/{interaction.guild.id}/manage",
             )
         )
         await interaction.response.send_message(
@@ -204,7 +204,7 @@ class Commands(commands.Cog):
             discord.ui.Button(
                 label="Get help",
                 style=discord.ButtonStyle.link,
-                url="https://mocbot.masterofcubesau.com/help",
+                url=f"{self.bot.WEBSITE_BASE_URL}/help",
             )
         )
         await interaction.response.send_message(
@@ -223,7 +223,7 @@ class Commands(commands.Cog):
             discord.ui.Button(
                 label="View dashboard",
                 style=discord.ButtonStyle.link,
-                url="https://mocbot.masterofcubesau.com/dashboard",
+                url=f"{self.bot.WEBSITE_BASE_URL}/dashboard",
             )
         )
         await interaction.response.send_message(
@@ -242,7 +242,7 @@ class Commands(commands.Cog):
             discord.ui.Button(
                 label="View account",
                 style=discord.ButtonStyle.link,
-                url=f"https://mocbot.masterofcubesau.com/{interaction.guild.id}/account",
+                url=f"{self.bot.WEBSITE_BASE_URL}/{interaction.guild.id}/account",
             )
         )
         await interaction.response.send_message(

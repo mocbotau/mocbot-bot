@@ -34,22 +34,40 @@ Type `/` in your Discord server to see available commands. Alternatively, you ma
 
 ## Deployment
 
-MOCBOT is intended to be deployed as a whole system. See [MOCBOT System](https://github.com/MasterOfCubesAU/mocbot-system).
+MOCBOT is intended to be deployed into Kubernetes via a custom Helm chart. This repository is setup for local development
+in an isolated environment using Docker.
 
-If you still wish to proceed and deploy MOCBOT's bot instance individually, ensure you have installed the following:
+## Local Development:
 
-- [Docker Desktop](https://docs.docker.com/desktop/) or [Docker Engine](https://docs.docker.com/engine/)
+1. `config.yaml` and `.env.local` work together to provide the necessary configuration for MOCBOT, to simulate the environment variables that would be provided
+   in the cluster when deployed. `docker-compose.yaml` creates Lavalink and MOCBOT containers, and links them together. All these files should not need changing.
+2. Create a `.local-secrets` folder in the root directory of the project. This folder should contain the following files:
+   | Filename | Description |
+   |--------------------|------------------------------------|
+   | `api-key` | The API key to connect to MOCBOT API. Assuming you are running the `MOCBOT-API` repo locally without changes, the default APIKey set in that repo is `test`. |
+   | `bot-token` | The token of the Discord bot |
+   | `lavalink-password` | The password for the Lavalink server. Take note of this to put in the Lavalink config as well. |
+   | `socket-key` | The key that will allow other services to connect to MOCBOT's socket. |
+   | `spotify-client-id` | The client ID for the Spotify API. |
+   | `spotify-client-secret` | The client secret for the Spotify API. |
+3. Copy [`lavalink/application.template.yaml`](./lavalink/application.template.yaml) to `lavalink/application.yaml.local`, and replace any template values with your own. Ensure that
+   `lavalink-password` is the same as the one in `.local-secrets/lavalink-password`.
 
-### Setup
+4a. If you already have a YouTube refresh token, you can directly put it into `application.yaml.local`.
 
-You will now need to populate a `config.yml` file in order for MOCBOT to run. See [config.template.yml](./config.template.yml) for a template.
+4b. If you do not have a YouTube refresh token, comment out the `refreshToken` line in `application.yaml.local`, set `skipInitialization` to `false`
+and run `docker compose up -d lavalink` to start the Lavalink server.
+Keep an eye on the logs. You will see a message telling you to visit `https://google.com/device` to enter a code. Once done, Lavalink will print out the refresh token.
+Copy this token into `application.yaml.local`, and set `skipInitialization` to `true`.
 
-Once the above setup is complete, run:
+> [!CAUTION]
+> DO NOT use your own Google account to generate the refresh token. There is a possibility that the account may be banned from using the YouTube API.
+> Use a burner account instead.
 
-```bash
-docker build . -t mocbot-bot
-docker run mocbot-bot
-```
+5. You will need MOCBOT API running (preferably locally). Clone the repo [here](https://github.com/mocbotau/mocbot-api).
+   Follow the instructions in the README to get the API running.
+
+6. Run `docker compose up --build -d` to start the bot.
 
 ## Feedback
 

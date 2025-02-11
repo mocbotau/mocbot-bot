@@ -22,7 +22,7 @@ class Guilds(commands.Cog):
             discord.ui.Button(
                 label="Setup",
                 style=discord.ButtonStyle.link,
-                url=f"https://mocbot.masterofcubesau.com/{guild.id}/manage",
+                url=f"{self.bot.WEBSITE_BASE_URL}/{guild.id}/manage",
             )
         )
         await guild.owner.send(

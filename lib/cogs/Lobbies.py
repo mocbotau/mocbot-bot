@@ -775,7 +775,7 @@ class Lobbies(commands.Cog):
                 discord.ui.Button(
                     label="Configure modules",
                     style=discord.ButtonStyle.link,
-                    url=f"https://mocbot.masterofcubesau.com/{interaction.guild.id}/manage",
+                    url=f"{self.bot.WEBSITE_BASE_URL}/{interaction.guild.id}/manage",
                 )
             )
             await interaction.followup.send(
