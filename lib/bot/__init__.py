@@ -1,12 +1,12 @@
 import asyncio
 from utils.APIHandler import API
 from discord.ext import commands
-from utils.ConfigHandler import Config
 import logging.config
 import logging
 import discord
 import os
 import typing
+import json
 
 from discord import Embed, Colour, Interaction, Message
 
@@ -20,6 +20,7 @@ class MOCBOT(commands.Bot):
         self.is_dev = is_dev
         self.mode = "DEVELOPMENT" if is_dev else "PRODUCTION"
         self.developers = API.get("/developers")
+        self.WEBSITE_BASE_URL = os.environ["WEBSITE_BASE_URL"]
 
     async def setup_hook(self) -> None:
         self.setup_logger()
@@ -30,25 +31,24 @@ class MOCBOT(commands.Bot):
         else:
             self.avatar_url = f"https://cdn.discordapp.com/embed/avatars/" f"{int(self.user.discriminator) % 5}.png"
 
-    def setup_logger(self) -> None:
-        if not os.path.exists("logs"):
-            os.makedirs("logs")
-
-        logging.config.dictConfig(Config.fetch()["LOGGING"])
+    def setup_logger(self):
+        with open("./logging.json") as f:
+            logging.config.dictConfig(json.loads(f.read()))
         self.logger = logging.getLogger(__name__)
         for handler in logging.getLogger().handlers:
-            if isinstance(handler, logging.FileHandler):
-                handler.encoding = "utf-8"
-            if handler.name == "file" and os.path.isfile("logs/latest.log"):
+            if handler.name == "file" and os.path.isfile('logs/latest.log'):
                 handler.doRollover()
-        logging.getLogger("discord").setLevel(logging.DEBUG)
+        logging.getLogger('discord').setLevel(logging.DEBUG)
 
     async def load_cog_manager(self) -> None:
         await self.load_extension("lib.cogs.Cogs")
 
     async def main(self) -> None:
+        with open(os.environ["BOT_TOKEN"], "r", encoding="utf-8") as f:
+            token = f.read().strip()
+
         await asyncio.gather(
-            super().start(Config.fetch()["TOKENS"][self.mode], reconnect=True),
+            super().start(token, reconnect=True),
             Socket.start(self),
         )
 
@@ -109,7 +109,7 @@ class MOCBOT(commands.Bot):
         if interaction.type is discord.InteractionType.application_command:
             self.logger.info(
                 f"[COMMAND] [{interaction.guild} // {interaction.guild.id}] {interaction.user} ({interaction.user.id})"
-                " used command {interaction.command.name}"
+                f" used command {interaction.command.name}"
             )
 
     async def on_message(self, message: Message) -> None:

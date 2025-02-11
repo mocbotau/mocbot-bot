@@ -1,13 +1,14 @@
-import requests
 from requests.exceptions import HTTPError
+import requests
 import logging
-from utils.ConfigHandler import Config
+import os
 
 
 class API:
 
-    BASE_URL = Config.fetch()["API_URL"]
-    API_KEY = Config.fetch()["API_KEY"]
+    BASE_URL = os.environ["API_URL"]
+    with open(os.environ["API_KEY"], "r", encoding="utf-8") as f:
+        API_KEY = f.read().strip()
     LOGGER = logging.getLogger(__name__)
 
     def convert_to_int(data):

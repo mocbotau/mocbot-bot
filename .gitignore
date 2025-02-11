@@ -1,5 +1,12 @@
 __pycache__
 
 .MOCBOT
-config.yml
 logs/*
+
+.local-secrets/
+
+.env*
+!.env.local
+
+application*
+!application.template.yaml

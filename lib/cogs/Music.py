@@ -27,6 +27,7 @@ import random
 import requests
 import discord
 import logging
+import os
 
 
 class Music(commands.Cog):
@@ -38,14 +39,21 @@ class Music(commands.Cog):
         self.bot = bot
         self.players = {}
         self.logger = logging.getLogger(__name__)
+        with open(os.environ["SPOTIFY_CLIENT_ID"], "r", encoding="utf-8") as f:
+            self.SPOTIFY_CLIENT_ID = f.read().strip()
+        with open(os.environ["SPOTIFY_CLIENT_SECRET"], "r", encoding="utf-8") as f:
+            self.SPOTIFY_CLIENT_SECRET = f.read().strip()
 
         # This ensures the client isn't overwritten during cog reloads.
         if not hasattr(bot, "lavalink"):
+            with open(os.environ["LAVALINK_PASSWORD"], "r", encoding="utf-8") as f:
+                lavalink_pass = f.read().strip()
+
             bot.lavalink = lavalink.Client(bot.user.id)
             bot.lavalink.add_node(
                 Config.fetch()["LAVALINK"]["HOST"],
                 Config.fetch()["LAVALINK"]["PORT"],
-                Config.fetch()["LAVALINK"]["PASS"],
+                lavalink_pass,
                 "eu",
                 "default-node",
             )  # Host, Port, Password, Region, Name
@@ -236,7 +244,7 @@ class Music(commands.Cog):
             url=(
                 await self.get_media_thumbnail(track.source_name, track.identifier)
                 if not player.paused
-                else "https://mocbot.masterofcubesau.com/static/media/media_paused.png"
+                else "https://fileshare.masterofcubesau.com/mocbot_pause"
             )
         )
         requester = guild.get_member(track.requester)
@@ -322,17 +330,17 @@ class Music(commands.Cog):
             case "youtube":
                 if requests.get(f"https://img.youtube.com/vi/{identifier}/maxresdefault.jpg").status_code == 200:
                     return f"https://img.youtube.com/vi/{identifier}/maxresdefault.jpg"
-                return "https://mocbot.masterofcubesau.com/static/media/noThumbnail.png"
+                return "https://fileshare.masterofcubesau.com/mocbot_no_thumbnail"
             case "spotify":
                 return requests.get(f"https://open.spotify.com/oembed?url=spotify:track:{identifier}").json()[
                     "thumbnail_url"
                 ]
             case "soundcloud":
-                return "https://mocbot.masterofcubesau.com/static/media/noThumbnail.png"
+                return "https://fileshare.masterofcubesau.com/mocbot_no_thumbnail"
             case "applemusic":
-                return "https://mocbot.masterofcubesau.com/static/media/noThumbnail.png"
+                return "https://fileshare.masterofcubesau.com/mocbot_no_thumbnail"
             case _:
-                return "https://mocbot.masterofcubesau.com/static/media/noThumbnail.png"
+                return "https://fileshare.masterofcubesau.com/mocbot_no_thumbnail"
 
     async def handle_new_player(self, interaction: discord.Interaction, player: lavalink.DefaultPlayer):
         await interaction.followup.send(
@@ -580,8 +588,8 @@ class Music(commands.Cog):
         guild = self.bot.get_guild(guild_id)
         self.logger.info(f"[MUSIC] [{guild} // {guild_id}] Paused {player.current.title} - {player.current.uri}")
 
-        await self.send_message(interaction, "Media has been paused.")
         await self.update_now_playing(interaction.guild, player)
+        await self.send_message(interaction, "Media has been paused.")
 
     # Written by Sam https://github.com/sam1357
     @app_commands.command(name="resume", description="Resumes the music")
@@ -603,8 +611,8 @@ class Music(commands.Cog):
         guild = self.bot.get_guild(guild_id)
         self.logger.info(f"[MUSIC] [{guild} // {guild_id}] Resumed {player.current.title} - {player.current.uri}")
 
-        await self.send_message(interaction, "Media has been resumed.")
         await self.update_now_playing(interaction.guild, player)
+        await self.send_message(interaction, "Media has been resumed.")
 
     @app_commands.command(name="shuffle", description="Shuffles the queue")
     @interaction_ensure_voice
@@ -810,8 +818,8 @@ class Music(commands.Cog):
         await interaction.response.defer(thinking=True, ephemeral=True)
         player = self.bot.lavalink.player_manager.get(interaction.guild.id)
         my_client = SpotifyClient(
-            Config.fetch()["SPOTIFY"]["CLIENT_ID"],
-            Config.fetch()["SPOTIFY"]["CLIENT_SECRET"],
+            self.SPOTIFY_CLIENT_ID,
+            self.SPOTIFY_CLIENT_SECRET,
         )
 
         if (player is None or player.current is None) and query is None:
@@ -877,13 +885,14 @@ class Music(commands.Cog):
         if not player.current.is_seekable:
             return await self.send_message(interaction, "The media does not support rewinding.", True)
 
-        new_time = await self.format_duration(max(0, player.position - converted_time * 1000))
+        new_time = max(0, player.position - converted_time * 1000)
+        new_time_fmt = await self.format_duration(new_time)
         formatted_time = await self.format_duration(converted_time * 1000)
 
         await player.seek(new_time)
         await self.send_message(
             interaction,
-            f"Rewinded `{formatted_time}` to `{new_time}`.",
+            f"Rewinded `{formatted_time}` to `{new_time_fmt}`.",
         )
 
     @app_commands.command(
@@ -912,7 +921,8 @@ class Music(commands.Cog):
         if not player.current.is_seekable:
             return await self.send_message(interaction, "The media does not support fast forwarding.", True)
 
-        new_time = await self.format_duration(player.position + converted_time * 1000)
+        new_time = player.position + converted_time * 1000
+        new_time_fmt = await self.format_duration(new_time)
         remaining_time = await self.format_duration(player.current.duration - player.position)
         time_forwarded = await self.format_duration(converted_time * 1000)
 
@@ -926,7 +936,7 @@ class Music(commands.Cog):
         await player.seek(new_time)
         await self.send_message(
             interaction,
-            f"Fast forwarded `{time_forwarded}` to `{new_time}`.",
+            f"Fast forwarded `{time_forwarded}` to `{new_time_fmt}`.",
         )
 
     @app_commands.command(

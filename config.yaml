@@ -1,0 +1,11 @@
+DEPENDENCIES: {}
+DISABLED_COGS: []
+
+# ======= API/SERVER CONNECTIONS =========
+SOCKET:
+  HOST: 0.0.0.0
+  PORT: 65535
+
+LAVALINK:
+  HOST: "service-lavalink"
+  PORT: 2333

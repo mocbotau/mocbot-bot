@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../infra-helm-charts/charts/generic-app/values.schema.json
+environment: "${ENVIRONMENT}"
+version: "${COMMIT_SHA}"
+
+deployments:
+  - name: "mocbot"
+    image: "${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:${REPO_NAME}-${ENVIRONMENT}"
+    config:
+      fileVariable: "mocbotConfig"
+    environment:
+      API_KEY: "/secrets/api-key"
+      API_URL: "https://${STAGING_PREFIX}api.masterofcubesau.com/v1"
+      BOT_TOKEN: "/secrets/bot-token"
+      CONFIG_FILE: "/config/config.yaml"
+      LAVALINK_PASSWORD: "/secrets/lavalink-password"
+      SOCKET_KEY: "/secrets/socket-key"
+      SPOTIFY_CLIENT_ID: "/secrets/spotify-client-id"
+      SPOTIFY_CLIENT_SECRET: "/secrets/spotify-client-secret"
+      WEBSITE_BASE_URL: "https://${STAGING_PREFIX}mocbot.masterofcubesau.com"
+    secrets:
+      api-key: "${API_KEY}"
+      bot-token: "${BOT_TOKEN}"
+      lavalink-password: "${LAVALINK_PASSWORD}"
+      socket-key: "${SOCKET_KEY}"
+      spotify-client-id: "${SPOTIFY_CLIENT_ID}"
+      spotify-client-secret: "${SPOTIFY_CLIENT_SECRET}"
+    readinessProbe:
+      tcpSocket:
+        port: 65535
+    service:
+      port: 65535
+
+statefulSets:
+  - name: "lavalink"
+    image: "ghcr.io/lavalink-devs/lavalink:4"
+    updateStrategy: "OnDelete"
+    config:
+      fileVariable: "lavalinkConfig"
+      fileName: "application.yaml"
+      mountPath: "/opt/Lavalink/application.yaml"
+      subPath: "application.yaml"
+    service:
+      port: 2333

@@ -122,7 +122,7 @@ class UserModeration(commands.Cog):
             discord.ui.Button(
                 label="View account",
                 style=discord.ButtonStyle.link,
-                url=f"https://mocbot.masterofcubesau.com/{interaction.guild.id}/account",
+                url=f"{self.bot.WEBSITE_BASE_URL}/{interaction.guild.id}/account",
             )
         )
         await interaction.response.send_message(
@@ -149,7 +149,7 @@ class UserModeration(commands.Cog):
             discord.ui.Button(
                 label="View account",
                 style=discord.ButtonStyle.link,
-                url=f"https://mocbot.masterofcubesau.com/{interaction.guild.id}/account",
+                url=f"{self.bot.WEBSITE_BASE_URL}/{interaction.guild.id}/account",
             )
         )
         API.post(

@@ -1,5 +1,6 @@
 import discord
 import lavalink
+import os
 from utils.ConfigHandler import Config
 
 
@@ -18,11 +19,14 @@ class LavalinkVoiceClient(discord.VoiceClient):
         if hasattr(self.client, "lavalink"):
             self.lavalink = self.client.lavalink
         else:
+            with open(os.environ["LAVALINK_PASSWORD"], "r", encoding="utf-8") as f:
+                lavalink_pass = f.read().strip()
+
             self.client.lavalink = lavalink.Client(client.user.id)
             self.client.lavalink.add_node(
                 Config.fetch()["LAVALINK"]["HOST"],
                 Config.fetch()["LAVALINK"]["PORT"],
-                Config.fetch()["LAVALINK"]["PASS"],
+                lavalink_pass,
                 "us",
                 "default-node",
             )

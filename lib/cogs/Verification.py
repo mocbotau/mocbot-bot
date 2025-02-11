@@ -166,7 +166,7 @@ class Verification(commands.Cog):
                         Button(
                             label="View dashboard",
                             style=discord.ButtonStyle.link,
-                            url=f"https://mocbot.masterofcubesau.com/{member.guild.id}/manage/verification",
+                            url=f"{Verification.bot.WEBSITE_BASE_URL}/{member.guild.id}/manage/verification",
                         )
                     )
                     message = await channel.send(
@@ -252,7 +252,7 @@ class Verification(commands.Cog):
                 Button(
                     label="Verify here",
                     style=discord.ButtonStyle.link,
-                    url=f"https://mocbot.masterofcubesau.com/verify/{member.guild.id}/{member.id}",
+                    url=f"{self.bot.WEBSITE_BASE_URL}/verify/{member.guild.id}/{member.id}",
                 )
             )
             await member.send(
@@ -355,7 +355,7 @@ class Verification(commands.Cog):
                     Button(
                         label="Verify here",
                         style=discord.ButtonStyle.link,
-                        url=f"https://mocbot.masterofcubesau.com/verify/{interaction.guild.id}/{interaction.id}",
+                        url=f"{self.bot.WEBSITE_BASE_URL}/verify/{interaction.guild.id}/{interaction.id}",
                     )
                 )
                 await interaction.followup.send(

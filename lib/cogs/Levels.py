@@ -386,7 +386,7 @@ class Levels(commands.Cog):
             discord.ui.Button(
                 label="View leaderboard",
                 style=discord.ButtonStyle.link,
-                url=f"https://mocbot.masterofcubesau.com/{interaction.guild.id}/leaderboard",
+                url=f"{self.bot.WEBSITE_BASE_URL}/{interaction.guild.id}/leaderboard",
             )
         )
         await interaction.response.send_message(
