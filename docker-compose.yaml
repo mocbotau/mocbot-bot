@@ -8,6 +8,7 @@ services:
     env_file:
       - ./.env.local
     networks:
+      - bot
       - lavalink
       - mocbot-api_api
   lavalink:
@@ -19,6 +20,7 @@ services:
       - lavalink
 
 networks:
+  bot:
+  lavalink:
   mocbot-api_api:
     external: true
-  lavalink:
