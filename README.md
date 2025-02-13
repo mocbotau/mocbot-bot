@@ -47,7 +47,7 @@ in an isolated environment using Docker.
    | `api-key` | The API key to connect to MOCBOT API. Assuming you are running the `MOCBOT-API` repo locally without changes, the default APIKey set in that repo is `test`. |
    | `bot-token` | The token of the Discord bot |
    | `lavalink-password` | The password for the Lavalink server. Take note of this to put in the Lavalink config as well. |
-   | `socket-key` | The key that will allow other services to connect to MOCBOT's socket. |
+   | `socket-key` | The key that will allow other services to connect to MOCBOT's socket. This should be the SHA256 hash of the intended key. |
    | `spotify-client-id` | The client ID for the Spotify API. |
    | `spotify-client-secret` | The client secret for the Spotify API. |
 3. Copy [`lavalink/application.template.yaml`](./lavalink/application.template.yaml) to `lavalink/application.yaml.local`, and replace any template values with your own. Ensure that
