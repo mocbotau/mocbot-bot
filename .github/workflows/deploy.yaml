@@ -79,7 +79,7 @@ jobs:
       API_KEY: ${{ needs.build.outputs.environment == 'prod' && secrets.API_KEY_PROD || secrets.API_KEY_STAGING }}
       BOT_TOKEN: ${{ needs.build.outputs.environment == 'prod' && secrets.BOT_TOKEN_PROD || secrets.BOT_TOKEN_STAGING }}
       SOCKET_KEY: ${{ needs.build.outputs.environment == 'prod' && secrets.SOCKET_KEY_PROD || secrets.SOCKET_KEY_STAGING }}
-      STAGING_PREFIX: ${{ needs.build.outputs.environment == 'staging' && 'staging.' || '' }}
+      STAGING_PREFIX: ${{ needs.build.outputs.environment == 'staging' && 'staging-' || '' }}
 
     steps:
       - name: Checkout infrastructure config
