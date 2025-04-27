@@ -23,7 +23,6 @@ docker-compose.yaml
 .pre-commit-config.yaml
 .python-version
 requirements-dev.txt
-pyproject.toml
 LICENSE
 
 *.md
