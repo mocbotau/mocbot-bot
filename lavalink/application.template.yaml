@@ -3,8 +3,8 @@ server:
   address: 0.0.0.0
 lavalink:
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:641e49b2c6ab03c2ab63f732a36aa3a531fe7170"
-      snapshot: true
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.3"
+      snapshot: false
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.6.0"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
