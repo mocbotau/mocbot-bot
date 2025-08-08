@@ -98,6 +98,7 @@ class Verification(commands.Cog):
         member_role_ids = [role.id for role in member.roles]
         verification_role_id = settings.get("VerificationRoleID")
         lockdown_role_id = settings.get("LockdownRoleID")
+        admin = kwargs.get("admin")
 
         if (int(verification_role_id) in member_role_ids or int(lockdown_role_id) in member_role_ids) and len(
             member_role_ids
@@ -140,7 +141,7 @@ class Verification(commands.Cog):
                             embed=Verification.bot.create_embed(
                                 "MOCBOT VERIFICATION",
                                 f"You have been successfully verified in **{member.guild}**"
-                                f"{' by {}'.format(kwargs.get('admin').mention) if kwargs.get('admin') != None else ''}"
+                                f"{' by {}'.format(admin.mention) if admin is not None else ''}"
                                 ". Enjoy your stay!",
                                 None,
                             )

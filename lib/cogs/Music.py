@@ -192,6 +192,29 @@ class Music(commands.Cog):
     async def track_end_hook(self, event: TrackEndEvent):
         event.player.store("last_track", event.track)
 
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Handle voice state updates"""
+        # If there are no members left in the voice channel, disconnect the bot
+        if member.id != self.bot.user.id:
+            if after.channel is None and before.channel is not None and len(before.channel.members) == 1:
+                await self.disconnect_bot(member.guild.id)
+            return
+
+        # Handle bot moving to new channel gracefully
+        if before.channel and after.channel and before.channel != after.channel:
+            guild_id = member.guild.id
+            player = self.bot.lavalink.player_manager.get(guild_id)
+
+            if player and player.is_connected:
+                if hasattr(member.guild.voice_client, 'channel'):
+                    member.guild.voice_client.channel = after.channel
+
+                    self.logger.info(
+                        f"[MUSIC] [{member.guild} // {guild_id}] Bot moved from "
+                        f"{before.channel.name} to {after.channel.name}"
+                    )
+
     async def disconnect_bot(self, guild_id):
         guild = self.bot.get_guild(guild_id)
         channel = guild.get_channel(self.players[guild_id]["CHANNEL"])
@@ -463,10 +486,10 @@ class Music(commands.Cog):
             return await self.send_message(interaction, "This media does not support seeking.", True)
         if time < 0 or time > player.current.duration / 1000:
             return await self.send_message(
-                interaction, f"You may only seek between `0` and `{player.current.duration/1000}` seconds.", True
+                interaction, f"You may only seek between `0` and `{player.current.duration / 1000}` seconds.", True
             )
         await player.seek(time * 1000)
-        await self.send_message(interaction, f"Seeked to `{await self.format_duration(time*1000)}`.")
+        await self.send_message(interaction, f"Seeked to `{await self.format_duration(time * 1000)}`.")
 
     @app_commands.command(name="loop", description="Loop the current media or queue.")
     @interaction_ensure_voice
@@ -485,14 +508,16 @@ class Music(commands.Cog):
         match type:
             case "Off":
                 player.set_loop(0)
+                await self.update_now_playing(interaction.guild, player)
                 await self.send_message(interaction, "Looping is disabled for the queue.")
             case "Song":
                 player.set_loop(1)
+                await self.update_now_playing(interaction.guild, player)
                 await self.send_message(interaction, "Song looping has been enabled.")
             case "Queue":
                 player.set_loop(2)
+                await self.update_now_playing(interaction.guild, player)
                 await self.send_message(interaction, "Queue looping has been enabled.")
-        await self.update_now_playing(interaction.guild, player)
 
     @app_commands.command(name="disconnect", description="Disconnects the bot from voice.")
     @interaction_ensure_voice
@@ -797,6 +822,7 @@ class Music(commands.Cog):
         match type:
             case "Off":
                 player.store("autoplay", False)
+                await self.update_now_playing(interaction.guild, player)
                 await self.send_message(interaction, "Autoplaying has been disabled for the queue.")
             case "On":
                 player.store("autoplay", True)
@@ -804,11 +830,11 @@ class Music(commands.Cog):
                 if player.loop != player.LOOP_NONE:
                     loop_disabled = True
                     player.set_loop(0)
+                await self.update_now_playing(interaction.guild, player)
                 await self.send_message(
                     interaction,
                     f"Autoplaying has been enabled for the queue{'.' if not loop_disabled else ' and looping has been disabled.'}",  # noqa: E501
                 )
-        await self.update_now_playing(interaction.guild, player)
 
     @app_commands.command(name="lyrics", description="Retrieves lyrics for a song")
     @app_commands.describe(
