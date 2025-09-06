@@ -13,9 +13,7 @@ class Verification(socketio.AsyncNamespace):
         with open(os.environ["SOCKET_KEY"], "r", encoding="utf-8") as f:
             config_key = f.read().strip()
 
-        if socketKey is None or (
-            socketKey is not None and sha256(socketKey.encode("utf-8")).hexdigest() != config_key
-        ):
+        if socketKey is None or (socketKey is not None and sha256(socketKey.encode("utf-8")).hexdigest() != config_key):
             logging.getLogger(__name__).warning(f"Unauthorised connection from {environ.get('REMOTE_ADDR', None)}")
             raise ConnectionRefusedError("Unauthorised")
 

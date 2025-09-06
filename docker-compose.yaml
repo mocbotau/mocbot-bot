@@ -11,14 +11,15 @@ services:
       - bot
       - lavalink
       - mocbot-api_api
+    ports:
+      - "65535:65535"
   lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4.0.7-alpine
+    image: ghcr.io/lavalink-devs/lavalink:4.1.1-alpine
     restart: unless-stopped
     volumes:
       - ./lavalink/application.yaml.local:/opt/Lavalink/application.yaml:ro
     networks:
       - lavalink
-
 networks:
   bot:
   lavalink:

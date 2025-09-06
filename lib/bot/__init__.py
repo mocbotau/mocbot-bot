@@ -9,11 +9,12 @@ import typing
 import json
 
 from discord import Embed, Colour, Interaction, Message
-
 from lib.socket.Socket import Socket
+from lib.music.MusicService import MusicService
 
 
 class MOCBOT(commands.Bot):
+    music_service: MusicService
 
     def __init__(self, is_dev: bool) -> None:
         super().__init__(command_prefix="!", intents=discord.Intents.all())
@@ -24,6 +25,7 @@ class MOCBOT(commands.Bot):
 
     async def setup_hook(self) -> None:
         self.setup_logger()
+        self.music_service = MusicService(self)
         await self.load_cog_manager()
         self.appinfo = await super().application_info()
         if self.appinfo.icon is not None:
@@ -36,9 +38,9 @@ class MOCBOT(commands.Bot):
             logging.config.dictConfig(json.loads(f.read()))
         self.logger = logging.getLogger(__name__)
         for handler in logging.getLogger().handlers:
-            if handler.name == "file" and os.path.isfile('logs/latest.log'):
+            if handler.name == "file" and os.path.isfile("logs/latest.log"):
                 handler.doRollover()
-        logging.getLogger('discord').setLevel(logging.DEBUG)
+        logging.getLogger("discord").setLevel(logging.DEBUG)
 
     async def load_cog_manager(self) -> None:
         await self.load_extension("lib.cogs.Cogs")
