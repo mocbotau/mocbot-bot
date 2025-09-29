@@ -20,8 +20,15 @@ services:
       - ./lavalink/application.yaml.local:/opt/Lavalink/application.yaml:ro
     networks:
       - lavalink
+      - yt-cipher
+  yt-cipher:
+    image: mocbotau/cloud:yt-cipher
+    restart: unless-stopped
+    networks:
+      - yt-cipher
 networks:
   bot:
   lavalink:
   mocbot-api_api:
     external: true
+  yt-cipher:

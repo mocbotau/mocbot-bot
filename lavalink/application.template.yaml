@@ -3,8 +3,8 @@ server:
   address: 0.0.0.0
 lavalink:
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.13.5"
-      snapshot: false
+    - dependency: "dev.lavalink.youtube:youtube-plugin:ff19b6f1751262ecba7b81fcf391b961008962d1"
+      snapshot: true
     - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.1"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
@@ -28,6 +28,10 @@ lavalink:
 plugins:
   youtube:
     enabled: true
+    remoteCipher:
+      url: "http://service-yt-cipher:8001"
+      # Comment out the above line and uncomment the line below for local running in your application.yaml.local
+      # url: "http://yt-cipher:8001"
     oauth:
       enabled: true
       refreshToken: ${LAVALINK_REFRESH_TOKEN}
@@ -40,7 +44,6 @@ plugins:
     clients:
       - MUSIC
       - WEB
-      - ANDROID_TESTSUITE
       - TVHTML5EMBEDDED
   lavasrc:
     providers:
