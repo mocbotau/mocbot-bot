@@ -1,7 +1,4 @@
 import discord
-import lavalink
-import os
-from utils.ConfigHandler import Config
 
 
 class LavalinkVoiceClient(discord.VoiceClient):
@@ -15,22 +12,7 @@ class LavalinkVoiceClient(discord.VoiceClient):
     def __init__(self, client: discord.Client, channel: discord.abc.Connectable):
         self.client = client
         self.channel = channel
-        # ensure a client already exists
-        if hasattr(self.client, "lavalink"):
-            self.lavalink = self.client.lavalink
-        else:
-            with open(os.environ["LAVALINK_PASSWORD"], "r", encoding="utf-8") as f:
-                lavalink_pass = f.read().strip()
-
-            self.client.lavalink = lavalink.Client(client.user.id)
-            self.client.lavalink.add_node(
-                Config.fetch()["LAVALINK"]["HOST"],
-                Config.fetch()["LAVALINK"]["PORT"],
-                lavalink_pass,
-                "us",
-                "default-node",
-            )
-            self.lavalink = self.client.lavalink
+        self.lavalink = client.music_service.lavalink
 
     async def on_voice_server_update(self, data):
         # the data needs to be transformed before being handed down to

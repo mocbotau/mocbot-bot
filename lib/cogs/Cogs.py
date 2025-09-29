@@ -115,7 +115,8 @@ class Cogs(commands.Cog):
         for cog in cogs:
             try:
                 await self.unload_cog(cog)
-            except Exception:
+            except Exception as e:
+                self.logger.error(f"[COG] Failed to unload {cog}: {e}", exc_info=True)
                 failed_cogs.append(cog)
         if failed_cogs:
             embed = self.bot.create_embed(
@@ -141,7 +142,8 @@ class Cogs(commands.Cog):
         for cog in cogs:
             try:
                 await self.load_cog(cog)
-            except Exception:
+            except Exception as e:
+                self.logger.error(f"[COG] Failed to load {cog}: {e}", exc_info=True)
                 failed_cogs.append(cog)
         if failed_cogs:
             embed = self.bot.create_embed(
@@ -167,7 +169,8 @@ class Cogs(commands.Cog):
         for cog in cogs:
             try:
                 await self.reload_cog(cog)
-            except Exception:
+            except Exception as e:
+                self.logger.error(f"[COG] Failed to reload {cog}: {e}", exc_info=True)
                 failed_cogs.append(cog)
         if failed_cogs:
             embed = self.bot.create_embed(

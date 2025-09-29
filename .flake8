@@ -1,4 +1,4 @@
 [flake8]
-exclude = .MOCBOT, .git, .github
+exclude = .MOCBOT, .git, .github, .venv, __pycache__
 max-line-length = 120
 ignore = E203, W503

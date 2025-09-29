@@ -15,11 +15,11 @@ name = "mocbot-bot"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
+package-mode = false
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-chardet = "5.2.0"
 discord-ext-menus = "1.1.0"
 discord-py = "2.3.2"
 expiringdict = "1.2.2"
@@ -28,9 +28,10 @@ pillow = "9.3.0"
 python-socketio = "5.11.0"
 pyyaml = "6.0.1"
 requests = "2.31.0"
+shortuuid = "1.0.13"
 spotifysearch = "0.0.5"
-swaglyrics = "1.2.2"
 stringprogressbar = "1.1.1"
+ytmusicapi = "1.11.1"
 
 [build-system]
 requires = ["poetry-core"]
