@@ -55,7 +55,7 @@ plugins:
       youtube: false
     spotify:
       clientId: ${SPOTIFY_CLIENT_ID}
-      clientSecret: ${SPOTIFY_SECRET}
+      clientSecret: ${SPOTIFY_CLIENT_SECRET}
       countryCode: "AU"
     youtube:
       countryCode: "AU"
