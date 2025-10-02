@@ -30,7 +30,7 @@ deployments:
     service:
       port: 65535
   - name: "yt-cipher"
-    image: "${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:yt-cipher"
+    image: "ghcr.io/kikkia/yt-cipher:master"
     service:
       port: 8001
 
