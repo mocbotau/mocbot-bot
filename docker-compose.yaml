@@ -22,7 +22,7 @@ services:
       - lavalink
       - yt-cipher
   yt-cipher:
-    image: mocbotau/cloud:yt-cipher
+    image: ghcr.io/kikkia/yt-cipher:master
     restart: unless-stopped
     networks:
       - yt-cipher
