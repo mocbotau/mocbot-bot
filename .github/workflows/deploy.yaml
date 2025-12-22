@@ -72,18 +72,11 @@ jobs:
       COMMIT_SHA: ${{ needs.build.outputs.commit-sha }}
       DOCKERHUB_USERNAME: ${{ secrets.ORG_DOCKERHUB_USERNAME }}
       DOCKERHUB_REPO: ${{ secrets.ORG_DOCKERHUB_REPO }}
-      LAVALINK_PASSWORD: ${{ needs.build.outputs.environment == 'prod' && secrets.LAVALINK_PASSWORD_PROD || secrets.LAVALINK_PASSWORD_STAGING }}
-      LAVALINK_REFRESH_TOKEN: ${{ secrets.LAVALINK_REFRESH_TOKEN }}
-      SPOTIFY_CLIENT_ID: ${{ needs.build.outputs.environment == 'prod' && secrets.SPOTIFY_CLIENT_ID_PROD || secrets.SPOTIFY_CLIENT_ID_STAGING }}
-      SPOTIFY_CLIENT_SECRET: ${{ needs.build.outputs.environment == 'prod' && secrets.SPOTIFY_CLIENT_SECRET_PROD || secrets.SPOTIFY_CLIENT_SECRET_STAGING }}
-      API_KEY: ${{ needs.build.outputs.environment == 'prod' && secrets.API_KEY_PROD || secrets.API_KEY_STAGING }}
-      BOT_TOKEN: ${{ needs.build.outputs.environment == 'prod' && secrets.BOT_TOKEN_PROD || secrets.BOT_TOKEN_STAGING }}
-      SOCKET_KEY: ${{ needs.build.outputs.environment == 'prod' && secrets.SOCKET_KEY_PROD || secrets.SOCKET_KEY_STAGING }}
       STAGING_PREFIX: ${{ needs.build.outputs.environment == 'staging' && 'staging-' || '' }}
 
     steps:
       - name: Checkout infrastructure config
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -104,13 +97,9 @@ jobs:
           --username ${{ secrets.ORG_CHARTMUSEUM_USER }} \
           --password ${{ secrets.ORG_CHARTMUSEUM_PASS }}
 
-      - name: Generate Lavalink config
-        run: |
-          cat lavalink/application.template.yaml | envsubst > lavalink/application.yaml
-
       - name: Deploy application to ${{ needs.build.outputs.environment }}
         run: |
           cat infra/values.yaml | envsubst | \
-          helm upgrade --install "$REPO_NAME" chartmuseum/generic-app --version 0.1.2 \
-            -f - --set-file mocbotConfig=config.yaml --set-file lavalinkConfig=lavalink/application.yaml \
+          helm upgrade --install "$REPO_NAME" chartmuseum/generic-app --version 0.3.0 \
+            -f - --set-file mocbotConfig=config.yaml --set-file lavalinkConfig=lavalink/application.template.yaml \
             --namespace="$REPO_NAME-$ENVIRONMENT" --create-namespace --atomic --timeout=1m --cleanup-on-fail
