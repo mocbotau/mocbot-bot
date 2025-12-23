@@ -1,0 +1,36 @@
+environments:
+  staging:
+    values:
+      - environment: staging
+        stagingPrefix: "staging-"
+  prod:
+    values:
+      - environment: prod
+        stagingPrefix: ""
+
+---
+repositories:
+  - name: chartmuseum
+    url: https://chartmuseum.masterofcubesau.com
+    username: {{ requiredEnv "CHARTMUSEUM_USER" }}
+    password: {{ requiredEnv "CHARTMUSEUM_PASS" }}
+
+helmDefaults:
+  cleanupOnFail: true
+  createNamespace: true
+  timeout: 60
+  wait: true
+  waitForJobs: true
+
+releases:
+  - name: mocbot-bot
+    chart: chartmuseum/generic-app
+    version: 0.3.0
+    namespace: mocbot-bot-{{ .Environment.Values.environment }}
+    values:
+      - infra/values.yaml.gotmpl
+    set:
+      - name: mocbotConfig
+        file: config.yaml
+      - name: lavalinkConfig
+        file: lavalink/application.template.yaml

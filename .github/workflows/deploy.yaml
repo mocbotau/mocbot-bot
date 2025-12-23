@@ -1,12 +1,9 @@
-name: Build, push, and deploy
+name: Deploy
 
 on:
   pull_request:
-    branches:
-      - main
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
     inputs:
       env:
@@ -19,87 +16,9 @@ on:
           - prod
 
 jobs:
-  build:
-    name: Build and push to Docker Hub
-    runs-on: arc-runner-set
-    outputs:
-      commit-sha: ${{ steps.extractor.outputs.short_sha }}
-      environment: ${{ steps.set-environment.outputs.env }}
-      repo-name: ${{ steps.extractor.outputs.repo_name }}
-    steps:
-      - name: Determine Environment
-        id: set-environment
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "env=${{ github.event.inputs.env }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "env=staging" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "env=prod" >> $GITHUB_OUTPUT
-          else
-            echo "Failed to determine environment"
-            exit 1
-          fi
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.ORG_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.ORG_DOCKERHUB_TOKEN }}
-
-      - name: Extract repository name and commit SHA
-        id: extractor
-        run: |
-          echo "${{ github.repository }}" | sed -E "s|^.*/(.*)$|repo_name=\1|" | tr "[:upper:]" "[:lower:]" >> $GITHUB_OUTPUT
-          echo "${{ github.sha }}" | sed -E "s|^(.{7}).*$|short_sha=\1|" >> $GITHUB_OUTPUT
-
-      - name: Build and push to ${{ steps.set-environment.outputs.env }}
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          tags: |
-            ${{ secrets.ORG_DOCKERHUB_USERNAME }}/${{ secrets.ORG_DOCKERHUB_REPO }}:${{ steps.extractor.outputs.repo_name }}-${{ steps.set-environment.outputs.env }}
-
   deploy:
-    name: Deploy to Kubernetes
-    needs: build
-    runs-on: ubuntu-latest
-    env:
-      ENVIRONMENT: ${{ needs.build.outputs.environment }}
-      REPO_NAME: ${{ needs.build.outputs.repo-name }}
-      COMMIT_SHA: ${{ needs.build.outputs.commit-sha }}
-      DOCKERHUB_USERNAME: ${{ secrets.ORG_DOCKERHUB_USERNAME }}
-      DOCKERHUB_REPO: ${{ secrets.ORG_DOCKERHUB_REPO }}
-      STAGING_PREFIX: ${{ needs.build.outputs.environment == 'staging' && 'staging-' || '' }}
-
-    steps:
-      - name: Checkout infrastructure config
-        uses: actions/checkout@v6
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.ORG_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.ORG_DOCKERHUB_TOKEN }}
-
-      - name: Set kube context
-        uses: azure/k8s-set-context@v4
-        with:
-          method: service-account
-          k8s-url: https://kube.masterofcubesau.com:6443
-          k8s-secret: ${{ secrets.ORG_K3S_AUTH_TOKEN }}
-
-      - name: Add internal chartmuseum
-        run: |
-          helm repo add chartmuseum https://chartmuseum.masterofcubesau.com \
-          --username ${{ secrets.ORG_CHARTMUSEUM_USER }} \
-          --password ${{ secrets.ORG_CHARTMUSEUM_PASS }}
-
-      - name: Deploy application to ${{ needs.build.outputs.environment }}
-        run: |
-          cat infra/values.yaml | envsubst | \
-          helm upgrade --install "$REPO_NAME" chartmuseum/generic-app --version 0.3.0 \
-            -f - --set-file mocbotConfig=config.yaml --set-file lavalinkConfig=lavalink/application.template.yaml \
-            --namespace="$REPO_NAME-$ENVIRONMENT" --create-namespace --atomic --timeout=1m --cleanup-on-fail
+    uses: mocbotau/infra-workflows/.github/workflows/generic-deploy.yaml@main
+    with:
+      event-name: ${{ github.event_name }}
+      environment: ${{ github.event.inputs.env }}
+    secrets: inherit

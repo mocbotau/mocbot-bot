@@ -1,22 +1,22 @@
 # yaml-language-server: $schema=../../infra-helm-charts/charts/generic-app/values.schema.json
-environment: "${ENVIRONMENT}"
-version: "${COMMIT_SHA}"
+environment: {{ .Environment.Values.environment | quote }}
+version: {{ requiredEnv "COMMIT_SHA" | quote }}
 
 deployments:
   - name: "mocbot"
-    image: "${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:${REPO_NAME}-${ENVIRONMENT}"
+    image: mocbotau/cloud:mocbot-bot-{{ .Environment.Values.environment }}
     config:
       fileVariable: "mocbotConfig"
     environment:
       API_KEY: "/secrets/api-key"
-      API_URL: "https://${STAGING_PREFIX}api.masterofcubesau.com/v1"
+      API_URL: https://{{ .Environment.Values.stagingPrefix }}api.masterofcubesau.com/v1
       BOT_TOKEN: "/secrets/bot-token"
       CONFIG_FILE: "/config/config.yaml"
       LAVALINK_PASSWORD: "/secrets/lavalink-password"
       SOCKET_KEY: "/secrets/socket-key"
       SPOTIFY_CLIENT_ID: "/secrets/spotify-client-id"
       SPOTIFY_CLIENT_SECRET: "/secrets/spotify-client-secret"
-      WEBSITE_BASE_URL: "https://${STAGING_PREFIX}mocbot.masterofcubesau.com"
+      WEBSITE_BASE_URL: https://{{ .Environment.Values.stagingPrefix }}mocbot.masterofcubesau.com
     secretProviderClass:
       projectId: "dd856d25-2961-4c5e-9280-9bcbae5d6d60"
       secrets:

@@ -30,3 +30,6 @@ LICENSE
 .MOCBOT
 
 lavalink/
+
+.dagger
+dagger.json
