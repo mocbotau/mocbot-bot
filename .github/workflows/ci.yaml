@@ -1,0 +1,9 @@
+name: MOCBOT CI
+
+on:
+  pull_request:
+
+jobs:
+  checks:
+    uses: mocbotau/infra-workflows/.github/workflows/generic-ci.yaml@main
+    secrets: inherit

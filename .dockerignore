@@ -30,3 +30,7 @@ LICENSE
 .MOCBOT
 
 lavalink/
+
+.dagger
+dagger.json
+helmfile.yaml.gotmpl
