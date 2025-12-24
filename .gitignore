@@ -7,6 +7,7 @@ logs/*
 
 .env*
 !.env.local
+!.env.ci
 
 application*
 !application.template.yaml

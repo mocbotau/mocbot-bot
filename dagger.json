@@ -1,0 +1,20 @@
+{
+  "name": "mocbot-bot",
+  "engineVersion": "v0.19.8",
+  "sdk": {
+    "source": "go"
+  },
+  "dependencies": [
+    {
+      "name": "docker",
+      "source": "https://github.com/mocbotau/infra-dagger-modules/modules/docker@main",
+      "pin": "89135d2835123d7d18e136aa6d51a6760af7164b"
+    },
+    {
+      "name": "python-ci",
+      "source": "https://github.com/mocbotau/infra-dagger-modules/modules/python-ci@main",
+      "pin": "89135d2835123d7d18e136aa6d51a6760af7164b"
+    }
+  ],
+  "source": ".dagger"
+}
