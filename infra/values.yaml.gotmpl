@@ -34,9 +34,9 @@ deployments:
           secretKey: "SPOTIFY_CLIENT_SECRET"
     readinessProbe:
       tcpSocket:
-        port: 65535
+        port: 65536
     service:
-      port: 65535
+      port: 65536
   - name: "yt-cipher"
     image: "ghcr.io/kikkia/yt-cipher:master"
     service:
