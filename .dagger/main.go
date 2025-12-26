@@ -7,24 +7,29 @@ import (
 )
 
 const (
-	repoName      = "mocbot-bot"
 	pythonVersion = "3.10"
 )
 
 type MocbotBot struct {
+	// Repository name
+	// +private
+	RepoName string
 	// Source code directory
+	// +private
 	Source *dagger.Directory
 	// +private
 	InfisicalClientSecret *dagger.Secret
 }
 
 func New(
+	repoName string,
 	// Source code directory
 	// +defaultPath="."
 	source *dagger.Directory,
 	infisicalClientSecret *dagger.Secret,
 ) *MocbotBot {
 	return &MocbotBot{
+		RepoName:              repoName,
 		Source:                source,
 		InfisicalClientSecret: infisicalClientSecret,
 	}
@@ -49,7 +54,7 @@ func (m *MocbotBot) BuildAndPush(
 	// +default="staging"
 	env string,
 ) (string, error) {
-	docker := dag.Docker(m.Source, m.InfisicalClientSecret, repoName, dagger.DockerOpts{
+	docker := dag.Docker(m.Source, m.InfisicalClientSecret, m.RepoName, dagger.DockerOpts{
 		Environment: env,
 	})
 
