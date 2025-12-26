@@ -8,6 +8,10 @@ environments:
       - environment: prod
         stagingPrefix: ""
 
+helmDefaults:
+  suppressOutputLineRegex:
+    - "version"
+
 ---
 repositories:
   - name: chartmuseum

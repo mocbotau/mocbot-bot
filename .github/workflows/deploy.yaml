@@ -17,7 +17,7 @@ on:
 
 jobs:
   deploy:
-    uses: mocbotau/infra-workflows/.github/workflows/generic-deploy.yaml@v0.1.1
+    uses: mocbotau/infra-workflows/.github/workflows/generic-deploy.yaml@v0.3.0
     with:
       event-name: ${{ github.event_name }}
       environment: ${{ github.event.inputs.env }}

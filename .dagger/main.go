@@ -11,9 +11,6 @@ const (
 )
 
 type MocbotBot struct {
-	// Repository name
-	// +private
-	RepoName string
 	// Source code directory
 	// +private
 	Source *dagger.Directory
@@ -22,14 +19,12 @@ type MocbotBot struct {
 }
 
 func New(
-	repoName string,
 	// Source code directory
 	// +defaultPath="."
 	source *dagger.Directory,
 	infisicalClientSecret *dagger.Secret,
 ) *MocbotBot {
 	return &MocbotBot{
-		RepoName:              repoName,
 		Source:                source,
 		InfisicalClientSecret: infisicalClientSecret,
 	}
@@ -53,8 +48,10 @@ func (m *MocbotBot) BuildAndPush(
 	// Environment to build image for
 	// +default="staging"
 	env string,
+	// Repository name
+	repoName string,
 ) (string, error) {
-	docker := dag.Docker(m.Source, m.InfisicalClientSecret, m.RepoName, dagger.DockerOpts{
+	docker := dag.Docker(m.Source, m.InfisicalClientSecret, repoName, dagger.DockerOpts{
 		Environment: env,
 	})
 
