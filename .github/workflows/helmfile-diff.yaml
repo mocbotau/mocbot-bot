@@ -5,7 +5,9 @@ on:
 
 jobs:
   helmfile-diff:
-    uses: mocbotau/infra-workflows/.github/workflows/generic-helmfile-diff.yaml@v0.3.0
+    uses: mocbotau/infra-workflows/.github/workflows/generic-helmfile-diff.yaml@v0.4.0
+    with:
+      run-staging: true
     secrets: inherit
 
 permissions:
