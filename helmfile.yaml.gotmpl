@@ -19,6 +19,8 @@ helmDefaults:
   atomic: true
   cleanupOnFail: true
   createNamespace: true
+  suppressOutputLineRegex:
+    - "version"
   timeout: 60
   wait: true
   waitForJobs: true
