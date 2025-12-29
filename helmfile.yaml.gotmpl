@@ -28,7 +28,7 @@ helmDefaults:
 releases:
   - name: mocbot-bot
     chart: chartmuseum/generic-app
-    version: 0.3.0
+    version: 0.4.0
     namespace: mocbot-bot-{{ .Environment.Values.environment }}
     values:
       - infra/values.yaml.gotmpl
