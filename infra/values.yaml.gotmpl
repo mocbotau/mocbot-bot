@@ -20,23 +20,27 @@ deployments:
     secretProviderClass:
       projectId: "dd856d25-2961-4c5e-9280-9bcbae5d6d60"
       secrets:
-        - fileName: "api-key"
-          secretKey: "API_KEY"
-        - fileName: "bot-token"
-          secretKey: "BOT_TOKEN"
-        - fileName: "lavalink-password"
-          secretKey: "LAVALINK_PASSWORD"
-        - fileName: "socket-key"
-          secretKey: "SOCKET_KEY"
-        - fileName: "spotify-client-id"
-          secretKey: "SPOTIFY_CLIENT_ID"
-        - fileName: "spotify-client-secret"
-          secretKey: "SPOTIFY_CLIENT_SECRET"
+        - secretKey: "API_KEY"
+        - secretKey: "BOT_TOKEN"
+        - secretKey: "LAVALINK_PASSWORD"
+        - secretKey: "SOCKET_KEY"
+        - secretKey: "SPOTIFY_CLIENT_ID"
+        - secretKey: "SPOTIFY_CLIENT_SECRET"
     readinessProbe:
       tcpSocket:
         port: 65535
     service:
       port: 65535
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: new-node
+              operator: In
+              values:
+              - "true"
+          weight: 100
   - name: "yt-cipher"
     image: "ghcr.io/kikkia/yt-cipher:master"
     service:
@@ -55,17 +59,23 @@ statefulSets:
       projectId: "dd856d25-2961-4c5e-9280-9bcbae5d6d60"
       syncAsKubernetesSecret: true
       secrets:
-        - fileName: "lavalink-password"
-          secretKey: "LAVALINK_PASSWORD"
+        - secretKey: "LAVALINK_PASSWORD"
           envName: "LAVALINK_SERVER_PASSWORD"
-        - fileName: "lavalink-refresh-token"
-          secretKey: "LAVALINK_REFRESH_TOKEN"
+        - secretKey: "LAVALINK_REFRESH_TOKEN"
           envName: "PLUGINS_YOUTUBE_OAUTH_REFRESH_TOKEN"
-        - fileName: "spotify-client-id"
-          secretKey: "SPOTIFY_CLIENT_ID"
+        - secretKey: "SPOTIFY_CLIENT_ID"
           envName: "PLUGINS_LAVASRC_SPOTIFY_CLIENT_ID"
-        - fileName: "spotify-client-secret"
-          secretKey: "SPOTIFY_CLIENT_SECRET"
+        - secretKey: "SPOTIFY_CLIENT_SECRET"
           envName: "PLUGINS_LAVASRC_SPOTIFY_CLIENT_SECRET"
     service:
       port: 2333
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - preference:
+            matchExpressions:
+            - key: new-node
+              operator: In
+              values:
+              - "true"
+          weight: 100
