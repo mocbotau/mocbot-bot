@@ -9,7 +9,7 @@ from requests import HTTPError
 import discord
 from discord import PartialMessage, Guild, TextChannel, Interaction, VoiceState, Member
 from discord.ext import commands
-from discord.ui import View
+from discord.ui import View, LayoutView
 from discord import app_commands
 from lavalink import DefaultPlayer
 
@@ -21,7 +21,7 @@ from lib.music.Filters import filter_manager
 from lib.music.Types import AutoplayMode, PlayerStopped
 
 from lib.music.Decorators import message_error_handler, event_handler
-from lib.music.EmbedFactory import MusicEmbedFactory
+from lib.music.EmbedFactory import MusicEmbedFactory, NowPlayingView
 
 if TYPE_CHECKING:
     from lib.bot import MOCBOT
@@ -85,6 +85,7 @@ class Music(commands.Cog):
         await self.send_new_now_playing(guild, player)
 
     @event_handler("now_playing_update")
+    @event_handler("queue_update")
     async def handle_now_playing_update(self, player: DefaultPlayer):
         """Handle updating the now playing message for a guild"""
         guild = self.bot.get_guild(player.guild_id)
@@ -139,7 +140,7 @@ class Music(commands.Cog):
         """Update the now playing message for a guild"""
         channel = guild.get_channel(self.players[guild.id]["CHANNEL"])
         message = await channel.fetch_message(self.players[guild.id]["MESSAGE_ID"])
-        await message.edit(embed=self.embeds.now_playing(guild, player))
+        await message.edit(view=self.build_now_playing_view(player))
 
     async def send_new_now_playing(self, guild: Guild, player: DefaultPlayer):
         """Send a new now playing message for a guild"""
@@ -147,7 +148,7 @@ class Music(commands.Cog):
         message = self.retrieve_now_playing(channel, guild)
         if message is not None:
             await message.delete()
-        message = await channel.send(embed=self.embeds.now_playing(guild, player))
+        message = await channel.send(view=self.build_now_playing_view(player))
         self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
 
     def retrieve_now_playing(self, channel: TextChannel, guild: Guild) -> PartialMessage | None:
@@ -195,13 +196,21 @@ class Music(commands.Cog):
             if channel is None:
                 return
 
-            await channel.send(embed=self.embeds.now_playing(channel.guild, player))
+            await channel.send(view=self.build_now_playing_view(player))
             self.players[player.guild_id] = {"CHANNEL": channel.id, "MESSAGE_ID": channel.last_message_id}
             return
 
-        await interaction.followup.send(embed=self.embeds.now_playing(interaction.guild, player))
+        await interaction.followup.send(view=self.build_now_playing_view(player))
         message = await interaction.original_response()
         self.players[interaction.guild.id] = {"CHANNEL": interaction.channel.id, "MESSAGE_ID": message.id}
+
+    def build_now_playing_view(self, player: DefaultPlayer) -> LayoutView:
+        """Build the now playing view for a player"""
+        view = discord.ui.LayoutView(timeout=None)
+        view.add_item(
+            NowPlayingView(self.service, player, player.current, self.bot)
+        )
+        return view
 
     @app_commands.command(
         name="play", description="Search and play media from YouTube, Spotify, SoundCloud, Apple Music etc."

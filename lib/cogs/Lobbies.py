@@ -658,7 +658,15 @@ class Lobbies(commands.Cog):
 
     @tasks.loop(seconds=120)
     async def lobby_offline_detection(self):
-        lobbies = API.get("/lobbies/")
+        try:
+            lobbies = API.get("/lobbies/")
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                return
+
+            self.logger.error("Skipping lobby offline detection due to API error: %s", e)
+            return
+
         for lobby in lobbies:
             guild = self.bot.get_guild(int(lobby.get("GuildID")))
             if guild is None:
