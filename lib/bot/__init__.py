@@ -17,7 +17,9 @@ class MOCBOT(commands.Bot):
     music_service: MusicService
 
     def __init__(self, is_dev: bool) -> None:
-        super().__init__(command_prefix="!", intents=discord.Intents.all())
+        super().__init__(command_prefix="!",
+                         intents=discord.Intents.all(),
+                         allowed_mentions=discord.AllowedMentions.none())
         self.is_dev = is_dev
         self.mode = "DEVELOPMENT" if is_dev else "PRODUCTION"
         self.developers = API.get("/developers")

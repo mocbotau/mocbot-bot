@@ -5,7 +5,7 @@ import shortuuid
 
 def format_duration(ms: int) -> str:
     """Format duration from milliseconds to a human-readable string."""
-    return datetime.fromtimestamp(ms / 1000).strftime("%Hh %Mm %Ss")
+    return datetime.fromtimestamp(ms / 1000).strftime("%H:%M:%S") if ms >= 3600000 else datetime.fromtimestamp(ms / 1000).strftime("%M:%S")
 
 
 def convert_to_ms(time: str) -> int | None:
