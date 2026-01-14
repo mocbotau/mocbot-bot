@@ -15,13 +15,14 @@ from lavalink import DefaultPlayer
 
 from utils.APIHandler import API
 from utils.Music import convert_to_ms, format_duration, format_lyrics_for_display
-from lib.music.MusicQueue import QueueMenu, QueuePagination
 from lib.music.MusicLyrics import LyricsMenu, LyricsPagination
 from lib.music.Filters import filter_manager
 from lib.music.Types import AutoplayMode, PlayerStopped
 
 from lib.music.Decorators import message_error_handler, event_handler
-from lib.music.EmbedFactory import MusicEmbedFactory, NowPlayingView
+from lib.music.EmbedFactory import MusicEmbedFactory
+from lib.music.containers import NowPlayingContainer, QueueAddContainer, QueueContainer
+from lib.music.views import QueueLayoutView
 
 if TYPE_CHECKING:
     from lib.bot import MOCBOT
@@ -70,7 +71,10 @@ class Music(commands.Cog):
     async def delay_delete(self, interaction: Interaction, time: float):
         """Helper function to delete a message after a delay."""
         await asyncio.sleep(time)
-        await interaction.delete_original_response()
+        try:
+            await interaction.delete_original_response()
+        except discord.errors.NotFound:
+            pass  # Message already deleted
 
     @event_handler("track_started")
     async def handle_track_start(self, player: DefaultPlayer):
@@ -140,7 +144,10 @@ class Music(commands.Cog):
         """Update the now playing message for a guild"""
         channel = guild.get_channel(self.players[guild.id]["CHANNEL"])
         message = await channel.fetch_message(self.players[guild.id]["MESSAGE_ID"])
-        await message.edit(view=self.build_now_playing_view(player))
+        # For some reason edit causes a ping despite the global disable, explicitly set allowed_mentions to none
+        await message.edit(
+            view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)),
+            allowed_mentions=discord.AllowedMentions.none())
 
     async def send_new_now_playing(self, guild: Guild, player: DefaultPlayer):
         """Send a new now playing message for a guild"""
@@ -148,7 +155,8 @@ class Music(commands.Cog):
         message = self.retrieve_now_playing(channel, guild)
         if message is not None:
             await message.delete()
-        message = await channel.send(view=self.build_now_playing_view(player))
+        message = await channel.send(
+            view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
         self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
 
     def retrieve_now_playing(self, channel: TextChannel, guild: Guild) -> PartialMessage | None:
@@ -196,19 +204,21 @@ class Music(commands.Cog):
             if channel is None:
                 return
 
-            await channel.send(view=self.build_now_playing_view(player))
+            await channel.send(
+                view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
             self.players[player.guild_id] = {"CHANNEL": channel.id, "MESSAGE_ID": channel.last_message_id}
             return
 
-        await interaction.followup.send(view=self.build_now_playing_view(player))
+        await interaction.followup.send(
+            view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
         message = await interaction.original_response()
         self.players[interaction.guild.id] = {"CHANNEL": interaction.channel.id, "MESSAGE_ID": message.id}
 
-    def build_now_playing_view(self, player: DefaultPlayer) -> LayoutView:
+    def build_view(self, container: discord.ui.Container, timeout=None) -> LayoutView:
         """Build the now playing view for a player"""
-        view = discord.ui.LayoutView(timeout=None)
+        view = discord.ui.LayoutView(timeout=timeout)
         view.add_item(
-            NowPlayingView(self.service, player, player.current, self.bot)
+            container
         )
         return view
 
@@ -228,10 +238,9 @@ class Music(commands.Cog):
         player = self.service.get_player_by_guild(interaction.guild.id)
 
         if result["was_playing"]:
-            embed = self.embeds.queue_add(
-                result["track"], player, interaction, "ADDED TO QUEUE: ", result["queue_position"]
-            )
-            await interaction.followup.send(embed=embed)
+            view = QueueAddContainer(self.service,
+                                     player, result, self.bot, interaction, position=result["queue_position"])
+            await interaction.followup.send(view=self.build_view(view))
             await self.delay_delete(interaction, Music.MESSAGE_ALIVE_TIME)
         else:
             await self.handle_new_player(player, interaction=interaction)
@@ -263,15 +272,11 @@ class Music(commands.Cog):
     @app_commands.command(name="queue", description="Retrieve the music queue.")
     async def queue(self, interaction: Interaction):
         """Displays the current music queue."""
-        pages = QueueMenu(
-            source=QueuePagination(
-                self.service.get_player_by_guild(interaction.guild.id),
-                interaction=interaction,
-                MusicCls=self,
-            ),
-            interaction=interaction,
-        )
-        await pages.start(await discord.ext.commands.Context.from_interaction(interaction))
+        player = self.service.get_player_by_guild(interaction.guild.id)
+        container = QueueContainer(self.service, player, self.bot)
+        view = QueueLayoutView(interaction)
+        view.add_item(container)
+        await interaction.response.send_message(view=view)
 
     @app_commands.command(name="seek", description="Seeks the current song.")
     @app_commands.describe(time="The time to seek to. Supported formats: 10 | 1:10 | 1:10:10")
@@ -519,8 +524,9 @@ class Music(commands.Cog):
         if not result["was_playing"]:
             await self.handle_new_player(player, interaction=interaction)
         else:
-            embed = self.embeds.queue_add(result["track"], player, interaction, "PLAYING NEXT", 1)
-            await interaction.followup.send(embed=embed)
+            view = QueueAddContainer(self.service,
+                                     player, result, self.bot, interaction, position=1, title="Playing Next")
+            await interaction.followup.send(view=self.build_view(view))
             await self.delay_delete(interaction, Music.MESSAGE_ALIVE_TIME)
 
     @app_commands.command(name="playnow", description="Skips the song and plays the requested track immediately.")

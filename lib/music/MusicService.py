@@ -201,7 +201,7 @@ class MusicService:
         return self.lavalink.player_manager.get(guild_id)
 
     async def play_track(
-        self, guild_id: int, user_id: int, query: str, index: int = None, handle_new_player=True
+        self, guild_id: int, user_id: int, query: str, index: int = None, handle_new_player=True, is_play_now=False,
     ) -> PlayResponse:
         """Handle playing a track or playlist based on a search query or URL.
         handle_new_player indicates whether to handle the new player logic, which by default should be True"""
@@ -229,6 +229,8 @@ class MusicService:
         if not results or not results.tracks:
             raise UserError(f"No media matching the search query `{original_query}` was found")
 
+        if results.load_type == LoadType.PLAYLIST and is_play_now:
+            raise UserError("You can only use playnow with single tracks, not playlists. Use the play command instead.")
         if results.load_type != LoadType.PLAYLIST:
             results.tracks = [results.tracks[0]]
 
@@ -249,7 +251,16 @@ class MusicService:
         else:
             asyncio.create_task(self.emitter.emit("queue_update", player))
 
-        return {"queue_position": len(player.queue) - 1, "track": results.tracks[-1], "was_playing": is_playing}
+        res = {"queue_position": index + 1 if index is not None else len(player.queue),
+               "track": results.tracks[-1],
+               "was_playing": is_playing}
+
+        if results.load_type == LoadType.PLAYLIST:
+            res["playlist_name"] = results.playlist_info.name
+            res["playlist_length"] = len(results.tracks)
+            res["playlist_url"] = original_query
+
+        return res
 
     async def search(self, query: str) -> LoadResult | None:
         """Search for tracks based on a query or URL."""
@@ -531,7 +542,8 @@ class MusicService:
         if continue_skipped:
             player.store("skip_history_update", True)
 
-        response = await self.play_track(guild_id, user_id, query, index=0, handle_new_player=handle_new_player)
+        response = await self.play_track(guild_id, user_id,
+                                         query, index=0, handle_new_player=handle_new_player, is_play_now=True)
         if not response["was_playing"]:
             return response
 
