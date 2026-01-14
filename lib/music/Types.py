@@ -30,8 +30,11 @@ class PlayResponse(TypedDict):
     """Response structure for play_track method"""
 
     queue_position: int
-    track: AudioTrack  # we don't need the entire list, just the last track
+    track: AudioTrack  # returns the last track added, if a playlist is added
     was_playing: bool
+    playlist_name: str | None
+    playlist_length: int | None
+    playlist_url: str | None
 
 
 class SingleTrackResponse(TypedDict):
