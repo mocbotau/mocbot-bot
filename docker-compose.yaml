@@ -11,6 +11,7 @@ services:
       - bot
       - lavalink
       - mocbot-api_api
+      - mocbot-archive_archive-api
     ports:
       - "65535:65535"
   lavalink:
@@ -30,5 +31,7 @@ networks:
   bot:
   lavalink:
   mocbot-api_api:
+    external: true
+  mocbot-archive_archive-api:
     external: true
   yt-cipher:
