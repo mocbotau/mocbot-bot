@@ -10,6 +10,8 @@ deployments:
     environment:
       API_KEY: "/secrets/api-key"
       API_URL: https://{{ .Environment.Values.stagingPrefix }}api.masterofcubesau.com/v1
+      ARCHIVE_API_KEY: "/secrets/archive-api-key"
+      ARCHIVE_API_URL: https://{{ .Environment.Values.stagingPrefix }}archive-api.masterofcubesau.com/api/v1
       BOT_TOKEN: "/secrets/bot-token"
       CONFIG_FILE: "/config/config.yaml"
       LAVALINK_PASSWORD: "/secrets/lavalink-password"
@@ -21,6 +23,7 @@ deployments:
       projectId: "dd856d25-2961-4c5e-9280-9bcbae5d6d60"
       secrets:
         - secretKey: "API_KEY"
+        - secretKey: "ARCHIVE_API_KEY"
         - secretKey: "BOT_TOKEN"
         - secretKey: "LAVALINK_PASSWORD"
         - secretKey: "SOCKET_KEY"

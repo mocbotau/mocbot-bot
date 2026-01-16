@@ -1,6 +1,6 @@
 from typing import TypedDict, Literal
 from ytmusicapi.models import LyricLine
-from lavalink import AudioTrack
+from lavalink import AudioTrack, DefaultPlayer
 
 AutoplayMode = Literal["Off", "On"]
 LoopMode = Literal["Off", "Song", "Queue"]
@@ -79,7 +79,7 @@ class PlayerStopped(TypedDict):
     """Information about a stopped player"""
 
     disconnect: bool
-    guild_id: int
+    player: DefaultPlayer
 
 
 class LyricsResponse(TypedDict):

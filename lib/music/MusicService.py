@@ -7,17 +7,20 @@ from typing import TYPE_CHECKING, Union
 
 from ytmusicapi import YTMusic
 import lavalink
-from lavalink import DefaultPlayer, LoadType, listener, LoadResult
+from lavalink import DefaultPlayer, LoadType, listener, LoadResult, AudioTrack
 from lavalink.events import TrackStartEvent, QueueEndEvent, TrackEndEvent
 
+from utils.APIHandler import ArchiveAPI
 from utils.ConfigHandler import Config
 from utils.Music import is_youtube_url, queue_length_msg, format_duration, create_id
+from lib.music.Decorators import event_handler
 from lib.music.Lavalink import LavalinkVoiceClient
 from lib.music.Filters import filter_manager
 from lib.music.Events import EventEmitter
 from lib.music.Exceptions import InternalError, UserError
 from lib.music.Types import (
     PlayResponse,
+    PlayerStopped,
     SingleTrackResponse,
     MusicServiceDefaults,
     LyricsResponse,
@@ -62,6 +65,9 @@ class MusicService:
         )
         self.lavalink.add_event_hooks(self)
 
+        self.emitter.on("player_stopped", self.end_session)
+        self.sessions = {}
+
     async def ensure_voice(self, guild_id: int, user_id: int, should_connect: bool = False) -> DefaultPlayer:
         """Ensure the bot is connected to a voice channel and return the player."""
         guild = self.bot.get_guild(guild_id)
@@ -80,6 +86,11 @@ class MusicService:
             permissions = user.voice.channel.permissions_for(guild.me)
             if not permissions.connect or not permissions.speak:
                 raise UserError("Please provide MOCBOT with CONNECT and SPEAK permissions.")
+
+            if guild_id not in self.sessions:
+                res = ArchiveAPI.post("/sessions", body={"guildId": guild_id})
+                if res.get("ID") is not None:
+                    self.sessions[guild_id] = res.get("ID")
 
             await user.voice.channel.connect(cls=LavalinkVoiceClient)
         else:
@@ -116,6 +127,21 @@ class MusicService:
         else:
             asyncio.create_task(self.emitter.emit("player_stopped", emit_payload))
 
+    @event_handler("player_stopped")
+    async def end_session(self, data: PlayerStopped):
+        """End the music session for a guild."""
+        guild_id = data.get("player").guild_id
+        if guild_id is None:
+            return
+
+        session_id = self.sessions.get(guild_id)
+        if session_id is None:
+            return
+
+        ArchiveAPI.patch(f"/sessions/{session_id}")
+
+        del self.sessions[guild_id]
+
     @listener(TrackStartEvent)
     async def track_start_hook(self, event: TrackStartEvent):
         """Handle the start of a new track."""
@@ -141,6 +167,38 @@ class MusicService:
 
         asyncio.create_task(self.emitter.emit("track_started", player))
         asyncio.create_task(self.handle_autoplay(event))
+        asyncio.create_task(self.add_track_to_session(guild_id, track))
+
+    async def add_track_to_session(self, guild_id: int, track: AudioTrack):
+        """Add a track to the current session."""
+        session_id = self.sessions.get(guild_id)
+        if session_id is None:
+            return
+
+        users_in_voice_channel = []
+        guild = self.bot.get_guild(guild_id)
+        if guild:
+            voice_channel = guild.voice_client.channel if guild.voice_client else None
+            if voice_channel:
+                users_in_voice_channel = [member.id for member in voice_channel.members
+                                          if not member.id == self.bot.user.id]
+
+        res = ArchiveAPI.post(
+            f"/sessions/{session_id}/tracks",
+            body={
+                "source": track.source_name,
+                "sourceId": track.identifier,
+                "title": track.title,
+                "artist": track.author,
+                "url": track.uri,
+                "durationMs": track.duration,
+                "queuedByUser": track.requester if track.requester else self.bot.user.id,
+                "listenerIds": users_in_voice_channel,
+            },
+        )
+
+        if res.get("ID") is not None:
+            track.extra["archive_track_id"] = res.get("ID")
 
     @listener(TrackEndEvent)
     async def track_end_hook(self, event: TrackEndEvent):
@@ -165,6 +223,19 @@ class MusicService:
         event.track.position = 0  # Reset position before adding to history
         recently_played.append(event.track)
         event.player.store("recently_played", recently_played)
+        asyncio.create_task(self.end_track_session(event.player.guild_id, event.track))
+
+    async def end_track_session(self, guild_id: int, track: AudioTrack):
+        """Mark a track as ended in the current session."""
+        session_id = self.sessions.get(guild_id)
+        if session_id is None:
+            return
+
+        archive_track_id = track.extra.get("archive_track_id")
+        if archive_track_id is None:
+            return
+
+        ArchiveAPI.patch(f"/tracks/{archive_track_id}")
 
     async def handle_autoplay(self, event: TrackEndEvent):
         """Handles saving a few tracks to an auto-play queue to speed up auto-queueing."""
