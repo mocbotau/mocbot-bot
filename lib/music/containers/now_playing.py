@@ -108,34 +108,37 @@ class NowPlayingContainer(BaseMusicContainer):
 
         self.add_item(buttons)
 
+    def _refresh_view(self) -> discord.ui.LayoutView:
+        """Create a new view with updated now playing container."""
+        new_container = NowPlayingContainer(self.service, self.player, self.track, self.bot)
+        view = discord.ui.LayoutView(timeout=None)
+        view.add_item(new_container)
+        return view
+
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_prev(self, interaction: discord.Interaction):
         """Handle previous track button press"""
-        await interaction.response.defer()
         await self.service.previous(interaction.guild.id, interaction.user.id)
-        await interaction.message.edit(view=self)
+        await self._defer_and_update_view(interaction, self._refresh_view())
 
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_play_pause(self, interaction: discord.Interaction):
         """Handle play/pause button press"""
-        await interaction.response.defer()
         if self.player.paused:
             await self.service.resume(interaction.guild.id, interaction.user.id)
         else:
             await self.service.pause(interaction.guild.id, interaction.user.id)
 
-        await interaction.message.edit(view=self)
+        await self._defer_and_update_view(interaction, self._refresh_view())
 
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_next(self, interaction: discord.Interaction):
         """Handle next track button press"""
-        await interaction.response.defer()
         await self.service.skip(interaction.guild.id, interaction.user.id)
-        await interaction.message.edit(view=self)
+        await self._defer_and_update_view(interaction, self._refresh_view())
 
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_autoplay(self, interaction: discord.Interaction):
         """Handle autoplay toggle button press"""
-        await interaction.response.defer()
         await self.service.autoplay(interaction.guild.id, interaction.user.id)
-        await interaction.message.edit(view=self)
+        await self._defer_and_update_view(interaction, self._refresh_view())

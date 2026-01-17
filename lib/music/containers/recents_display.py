@@ -23,7 +23,8 @@ class RecentsContainer(PaginatedContainer):
                  page: int = 0,
                  per_page: int = 5
                  ):
-        super().__init__(page, per_page)
+        # Ephemeral if personal recents
+        super().__init__(page, per_page, ephemeral=not is_server)
 
         self.service = service
         self.bot = bot

@@ -14,26 +14,30 @@ class BaseMusicContainer(discord.ui.Container):
     service: "MusicService"
     bot: "MOCBOT"
 
-    def __init__(self):
+    def __init__(self, ephemeral: bool = False):
         super().__init__()
         self.accent_color = self.ACCENT_COLOR
+        self.ephemeral = ephemeral
 
     async def _defer_and_update_view(self, interaction: discord.Interaction, new_view: discord.ui.View):
         """Helper to defer interaction and update message with new view."""
-        await interaction.response.defer()
-        await interaction.message.edit(view=new_view, allowed_mentions=discord.AllowedMentions.none())
+        await interaction.response.defer(ephemeral=self.ephemeral)
+        if self.ephemeral:
+            await interaction.edit_original_response(view=new_view)
+        else:
+            await interaction.message.edit(view=new_view, allowed_mentions=discord.AllowedMentions.none())
 
     async def _delete_message(self, interaction: discord.Interaction):
         """Helper to defer and delete the message."""
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=self.ephemeral)
         await interaction.delete_original_response()
 
 
 class PaginatedContainer(BaseMusicContainer):
     """Base class for paginated music containers with common pagination logic."""
 
-    def __init__(self, page: int = 0, per_page: int = 5):
-        super().__init__()
+    def __init__(self, page: int = 0, per_page: int = 5, ephemeral: bool = False):
+        super().__init__(ephemeral=ephemeral)
         self.page = page
         self.per_page = per_page
         self.first_button = None

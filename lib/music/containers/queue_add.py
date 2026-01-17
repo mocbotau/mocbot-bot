@@ -28,6 +28,7 @@ class QueueAddContainer(BaseMusicContainer):
         self.player = player
         self.result = result
         self.bot = bot
+        self.logger = bot.logger
 
         metadata_text = ""
         is_playlist = result.get("playlist_name") is not None

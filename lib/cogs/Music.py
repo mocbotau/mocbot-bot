@@ -555,6 +555,7 @@ class Music(commands.Cog):
         )
 
     @app_commands.command(name="music", description="Provides a link to the music dashboard")
+    @message_error_handler(ephemeral=False, followup=False)
     async def music(self, interaction: Interaction):
         """Sends a link to the music dashboard for the current guild."""
         view = View()
@@ -576,13 +577,15 @@ class Music(commands.Cog):
         )
 
     @app_commands.command(name="recents", description="Fetch your or the server's recently listened to tracks", )
-    @app_commands.describe(get_server="Fetch the server's recent tracks instead of your own")
-    async def recents(self, interaction: Interaction, get_server: typing.Optional[bool] = False):
+    @app_commands.describe(server_recents="Fetch the server's recent tracks instead of your own")
+    @message_error_handler(ephemeral=False, followup=True)
+    async def recents(self, interaction: Interaction, server_recents: typing.Optional[Literal["Yes", "No"]] = "No"):
         """Sends a view displaying recent tracks for the user or server."""
-        await interaction.response.defer()
+        is_personal = server_recents == "No"
+        await interaction.response.defer(ephemeral=is_personal, thinking=True)
 
         recents = []
-        if get_server:
+        if not is_personal:
             recents = ArchiveAPI.get(f"/guilds/{interaction.guild.id}/tracks/recent?limit=50")
         else:
             recents = ArchiveAPI.get(f"/users/{interaction.user.id}/tracks/recent?limit=50")
@@ -591,13 +594,20 @@ class Music(commands.Cog):
             service=self.service,
             bot=self.bot,
             recents_data=recents,
-            is_server=get_server,
+            is_server=not is_personal,
         )
 
         view = AutoDeleteLayoutView(interaction, timeout=AutoDeleteLayoutView.RECENTS_DISPLAY_TIMEOUT)
         view.add_item(container)
-        await interaction.followup.send(view=view)
+        await interaction.followup.send(view=view, ephemeral=is_personal)
 
+    @app_commands.command(name="clear", description="Clears the current music queue")
+    @message_error_handler(ephemeral=False, followup=False)
+    async def clear(self, interaction: Interaction):
+        """Clears the current music queue."""
+        await self.service.clear_queue(interaction.guild.id, interaction.user.id)
+        await send_message(self.bot, interaction, "The music queue has been cleared.")
+    
     @play.autocomplete("query")
     @play_next.autocomplete("query")
     @play_now.autocomplete("query")
