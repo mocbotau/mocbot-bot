@@ -37,6 +37,15 @@ class PlayResponse(TypedDict):
     playlist_url: str | None
 
 
+class PlayMultipleResponse(TypedDict):
+    """Response structure for play_tracks method"""
+
+    playlist_length: int
+    failed: int
+    track: AudioTrack
+    was_playing: bool
+
+
 class SingleTrackResponse(TypedDict):
     """Response structure for methods that return a single track, e.g., skip or previous"""
 

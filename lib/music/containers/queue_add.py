@@ -2,6 +2,7 @@ import discord
 from lavalink import DefaultPlayer
 
 from lib.bot import MOCBOT
+from lib.music.Decorators import message_error_handler
 from lib.music.MusicService import MusicService
 from lib.music.Types import PlayResponse
 from lib.music.containers.base import BaseMusicContainer
@@ -19,7 +20,7 @@ class QueueAddContainer(BaseMusicContainer):
         bot: MOCBOT,
         interaction: discord.Interaction,
         title: str = "Added to Queue",
-        position: int | None = None
+        position: int | None = None,
     ):
         super().__init__()
 
@@ -33,13 +34,19 @@ class QueueAddContainer(BaseMusicContainer):
         track = result["track"]
 
         if is_playlist:
+            playlist_text = ""
+            if result.get("playlist_url") is None:
+                playlist_text = f"**{result['playlist_name']}**"
+            else:
+                playlist_text = f"[**{result['playlist_name']}**]({result['playlist_url']})"
+
             self.add_item(discord.ui.TextDisplay(f"**{title}**")).add_item(
-                discord.ui.TextDisplay(f"### Added [{result['playlist_name']}]({result['playlist_url']})")
+                discord.ui.TextDisplay(f"### Added {playlist_text}")
             )
             metadata_text = f"-# Tracks Added\n**{result['playlist_length']}**\n"
         else:
             self.add_item(discord.ui.TextDisplay(f"**{title}**")).add_item(
-                discord.ui.TextDisplay(f"### Added [{track.title}]({track.uri})")
+                discord.ui.TextDisplay(f"### [{track.title}]({track.uri})")
             )
             metadata_text = "-# Position in Queue\n**" + \
                             (str(position) if position is not None else str(len(player.queue))) + "**\n"
@@ -92,16 +99,18 @@ class QueueAddContainer(BaseMusicContainer):
         if not is_playlist:
             self.add_item(buttons)
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_top(self, interaction: discord.Interaction):
         """Handle top button press"""
-        await self.service.move(interaction.guild.id, interaction.user.id, self.result.get("queue_position"), 1)
         await interaction.response.defer()
+        await self.service.move(interaction.guild.id, interaction.user.id, self.result.get("queue_position"), 1)
         await interaction.message.delete()
         track = self.result["track"]
         await interaction.followup.send(
             embed=self.bot.create_embed("MOCBOT MUSIC", f"[{track.title}]({track.uri}) moved to top."), ephemeral=True
         )
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_play_now(self, interaction: discord.Interaction):
         """Handle play now button press"""
         await interaction.response.defer()
@@ -110,11 +119,12 @@ class QueueAddContainer(BaseMusicContainer):
                                     self.result["track"].uri, handle_new_player=False)
         await interaction.message.delete()
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_delete(self, interaction: discord.Interaction):
         """Handle delete button press"""
+        await interaction.response.defer()
         await self.service.remove(interaction.guild.id, interaction.user.id, self.result.get("queue_position"))
         track = self.result["track"]
-        await interaction.response.defer()
         await interaction.message.delete()
         await interaction.followup.send(
             embed=self.bot.create_embed("MOCBOT MUSIC",

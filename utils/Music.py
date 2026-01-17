@@ -1,7 +1,10 @@
 from datetime import datetime
+import asyncio
 import re
+import discord
 import shortuuid
 
+MESSAGE_ALIVE_TIME = 10 # seconds
 
 def format_duration(ms: int) -> str:
     """Format duration from milliseconds to a human-readable string."""
@@ -63,3 +66,25 @@ def format_lyrics_for_display(lyrics: str, max_length: int = 2000) -> list[str]:
 def create_id() -> str:
     """Create a short unique ID."""
     return shortuuid.uuid()[:6].lower()
+
+
+async def delay_delete(interaction: discord.Interaction, time: float):
+    """Helper function to delete a message after a delay."""
+    await asyncio.sleep(time)
+    try:
+        await interaction.delete_original_response()
+    except discord.errors.NotFound:
+        pass  # Message already deleted
+
+
+async def send_message(bot, interaction: discord.Interaction, msg: str, ephemeral=False, followup=False):
+    """Helper function to send messages with a default embed to the user."""
+    if followup:
+        await interaction.followup.send(embed=bot.create_embed("MOCBOT MUSIC", msg), ephemeral=ephemeral)
+    else:
+        await interaction.response.send_message(
+            embed=bot.create_embed("MOCBOT MUSIC", msg), ephemeral=ephemeral
+        )
+
+    if not ephemeral:
+        return await delay_delete(interaction, MESSAGE_ALIVE_TIME)
