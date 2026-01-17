@@ -3,6 +3,7 @@ import functools
 import discord
 
 from lib.music.Exceptions import UserError, InternalError
+from utils.Music import send_message
 
 
 def message_error_handler(ephemeral=True, followup=False):
@@ -14,10 +15,11 @@ def message_error_handler(ephemeral=True, followup=False):
             try:
                 return await f(self, interaction, *args, **kwargs)
             except UserError as e:
-                await self.send_message(interaction, str(e), ephemeral=ephemeral, followup=followup)
+                await send_message(self.bot, interaction, str(e), ephemeral=ephemeral, followup=followup)
             except InternalError as e:
                 self.logger.error("InternalError: {%s}", e)
-                await self.send_message(
+                await send_message(
+                    self.bot,
                     interaction,
                     "An internal error occurred while processing your request. The incident has been logged.",
                     ephemeral=ephemeral,
@@ -25,7 +27,8 @@ def message_error_handler(ephemeral=True, followup=False):
                 )
             except Exception as e:
                 self.logger.error("Unexpected error in %s: %s", f.__name__, e, exc_info=True)
-                await self.send_message(
+                await send_message(
+                    self.bot,
                     interaction,
                     "An unexpected error occurred while processing your request. The incident has been logged.",
                     ephemeral=ephemeral,

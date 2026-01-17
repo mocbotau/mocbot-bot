@@ -19,6 +19,7 @@ from lib.music.Filters import filter_manager
 from lib.music.Events import EventEmitter
 from lib.music.Exceptions import InternalError, UserError
 from lib.music.Types import (
+    PlayMultipleResponse,
     PlayResponse,
     PlayerStopped,
     SingleTrackResponse,
@@ -167,6 +168,11 @@ class MusicService:
 
         asyncio.create_task(self.emitter.emit("track_started", player))
         asyncio.create_task(self.handle_autoplay(event))
+
+        # Don't add to session if looping single track. We would've already added it on first play, when loop was off
+        if player.loop == player.LOOP_SINGLE:
+            return
+
         asyncio.create_task(self.add_track_to_session(guild_id, track))
 
     async def add_track_to_session(self, guild_id: int, track: AudioTrack):
@@ -271,11 +277,8 @@ class MusicService:
         """Get the lavalink player for a specific guild."""
         return self.lavalink.player_manager.get(guild_id)
 
-    async def play_track(
-        self, guild_id: int, user_id: int, query: str, index: int = None, handle_new_player=True, is_play_now=False,
-    ) -> PlayResponse:
-        """Handle playing a track or playlist based on a search query or URL.
-        handle_new_player indicates whether to handle the new player logic, which by default should be True"""
+    async def _validate_guild_and_user(self, guild_id: int, user_id: int):
+        """Validate guild and user existence. Returns (guild, user) tuple."""
         guild = self.bot.get_guild(guild_id)
         if not guild:
             raise InternalError(f"Guild with ID {guild_id} not found")
@@ -284,17 +287,43 @@ class MusicService:
         if not user:
             raise InternalError(f"User with ID {user_id} not found in guild {guild_id}")
 
+        return guild, user
+
+    def _prepare_query(self, query: str) -> tuple[str, str]:
+        """Prepare query for track search. Returns (prepared_query, original_query) tuple."""
+        query = query.strip("<>")
+        original_query = query
+        if not re.compile(r"https?://(?:www\.)?.+").match(query):
+            query = f"ytsearch:{query}"
+        return query, original_query
+
+    async def _finalize_playback(self, player: DefaultPlayer, handle_new_player: bool) -> bool:
+        """Finalize playback by setting volume and starting player if needed.
+        Returns whether the player was already playing."""
+        await player.set_volume(self.player_defaults["volume"])
+        is_playing = player.is_playing
+
+        if not player.is_playing:
+            player.store("handle_new_player", handle_new_player)
+            await player.play()
+        else:
+            asyncio.create_task(self.emitter.emit("queue_update", player))
+
+        return is_playing
+
+    async def play_track(
+        self, guild_id: int, user_id: int, query: str, index: int = None, handle_new_player=True, is_play_now=False,
+    ) -> PlayResponse:
+        """Handle playing a track or playlist based on a search query or URL.
+        handle_new_player indicates whether to handle the new player logic, which by default should be True"""
+        await self._validate_guild_and_user(guild_id, user_id)
         player = await self.ensure_voice(guild_id, user_id, should_connect=True)
 
         if player.queue:
             if index is not None and (index < 0 or index > len(player.queue)):
                 raise UserError(f"Invalid index. {queue_length_msg(len(player.queue))}")
 
-        query = query.strip("<>")
-        original_query = query
-        if not re.compile(r"https?://(?:www\.)?.+").match(query):
-            query = f"ytsearch:{query}"
-
+        query, original_query = self._prepare_query(query)
         results = await player.node.get_tracks(query)
 
         if not results or not results.tracks:
@@ -309,18 +338,7 @@ class MusicService:
             track.extra["id"] = create_id()
             player.add(requester=user_id, track=track, index=index)
 
-        await player.set_volume(self.player_defaults["volume"])
-        is_playing = player.is_playing
-
-        if not player.is_playing:
-            # If we are connecting from Discord, the Discord side would have already handled the new player logic,
-            # so we set this variable so when track_start is called, it doesn't try to send a new now playing message
-            player.store("handle_new_player", handle_new_player)
-            # We don't want to call .play() if the player is playing as that will effectively skip
-            # the current track.
-            await player.play()
-        else:
-            asyncio.create_task(self.emitter.emit("queue_update", player))
+        is_playing = await self._finalize_playback(player, handle_new_player)
 
         res = {"queue_position": index + 1 if index is not None else len(player.queue),
                "track": results.tracks[-1],
@@ -332,6 +350,76 @@ class MusicService:
             res["playlist_url"] = original_query
 
         return res
+
+    async def play_tracks(
+        self, guild_id: int, user_id: int, queries: list[str], handle_new_player=True, initial_batch_size: int = 2,
+    ) -> PlayMultipleResponse:
+        """Handle playing a list of queries.
+        Queues the first few tracks immediately and starts playback, then queues the rest in the background.
+        initial_batch_size: Number of tracks to queue before starting playback (default: 2)
+        """
+        await self._validate_guild_and_user(guild_id, user_id)
+        player = await self.ensure_voice(guild_id, user_id, should_connect=True)
+
+        if not queries:
+            raise UserError("No queries provided to play.")
+
+        initial_queries = queries[:initial_batch_size]
+        remaining_queries = queries[initial_batch_size:]
+
+        failed_count = 0
+        total_tracks = 0
+        last_results = None
+
+        for query in initial_queries:
+            query, _ = self._prepare_query(query)
+            results = await player.node.get_tracks(query)
+
+            if not results or not results.tracks:
+                failed_count += 1
+                continue
+
+            if results.load_type != LoadType.PLAYLIST:
+                results.tracks = [results.tracks[0]]
+
+            for track in results.tracks:
+                track.extra["id"] = create_id()
+                player.add(requester=user_id, track=track)
+                total_tracks += 1
+
+            last_results = results
+
+        is_playing = await self._finalize_playback(player, handle_new_player)
+
+        if remaining_queries:
+            asyncio.create_task(self._queue_remaining_tracks(player, user_id, remaining_queries))
+
+        res = {"playlist_length": total_tracks + len(remaining_queries),
+               "failed": failed_count,
+               "track": last_results.tracks[-1] if last_results else None,
+               "was_playing": is_playing}
+
+        return res
+
+    async def _queue_remaining_tracks(self, player: DefaultPlayer, user_id: int, queries: list[str]):
+        """Background task to queue remaining tracks after initial batch is playing."""
+        failed = 0
+        for query in queries:
+            query, _ = self._prepare_query(query)
+            results = await player.node.get_tracks(query)
+
+            if not results or not results.tracks:
+                failed += 1
+                continue
+
+            if results.load_type != LoadType.PLAYLIST:
+                results.tracks = [results.tracks[0]]
+
+            for track in results.tracks:
+                track.extra["id"] = create_id()
+                player.add(requester=user_id, track=track)
+
+        asyncio.create_task(self.emitter.emit("queue_update", player))
 
     async def search(self, query: str) -> LoadResult | None:
         """Search for tracks based on a query or URL."""

@@ -2,6 +2,7 @@ import discord
 from lavalink import DefaultPlayer, AudioTrack
 
 from lib.bot import MOCBOT
+from lib.music.Decorators import message_error_handler
 from lib.music.MusicService import MusicService
 from lib.music.containers.base import BaseMusicContainer
 from utils.Music import format_duration
@@ -17,6 +18,7 @@ class NowPlayingContainer(BaseMusicContainer):
         self.player = player
         self.track = track
         self.bot = bot
+        self.logger = bot.logger
 
         modifier = ""
         match player.loop:
@@ -106,30 +108,34 @@ class NowPlayingContainer(BaseMusicContainer):
 
         self.add_item(buttons)
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_prev(self, interaction: discord.Interaction):
         """Handle previous track button press"""
-        await self.service.previous(interaction.guild.id, interaction.user.id)
         await interaction.response.defer()
+        await self.service.previous(interaction.guild.id, interaction.user.id)
         await interaction.message.edit(view=self)
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_play_pause(self, interaction: discord.Interaction):
         """Handle play/pause button press"""
+        await interaction.response.defer()
         if self.player.paused:
             await self.service.resume(interaction.guild.id, interaction.user.id)
         else:
             await self.service.pause(interaction.guild.id, interaction.user.id)
 
-        await interaction.response.defer()
         await interaction.message.edit(view=self)
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_next(self, interaction: discord.Interaction):
         """Handle next track button press"""
-        await self.service.skip(interaction.guild.id, interaction.user.id)
         await interaction.response.defer()
+        await self.service.skip(interaction.guild.id, interaction.user.id)
         await interaction.message.edit(view=self)
 
+    @message_error_handler(ephemeral=True, followup=True)
     async def handle_autoplay(self, interaction: discord.Interaction):
         """Handle autoplay toggle button press"""
-        await self.service.autoplay(interaction.guild.id, interaction.user.id)
         await interaction.response.defer()
+        await self.service.autoplay(interaction.guild.id, interaction.user.id)
         await interaction.message.edit(view=self)

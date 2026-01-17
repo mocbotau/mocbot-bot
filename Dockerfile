@@ -1,4 +1,4 @@
-FROM python:3.10 AS base
+FROM python:3.11 AS base
 
 RUN curl -sSL https://install.python-poetry.org | python3 - && \
     ln -s /root/.local/bin/poetry /usr/local/bin/poetry
@@ -12,7 +12,7 @@ RUN poetry config virtualenvs.create false && \
 
 COPY . /app
 
-FROM python:3.10-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 WORKDIR /app
@@ -22,7 +22,7 @@ RUN mkdir logs && chown -R appuser:appgroup /app/logs
 RUN mkdir /nonexistent && chown -R appuser:appgroup /nonexistent
 
 COPY --from=base /app /app
-COPY --from=base /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY --from=base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 
 USER appuser
 

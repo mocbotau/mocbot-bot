@@ -9,27 +9,32 @@ from requests import HTTPError
 import discord
 from discord import PartialMessage, Guild, TextChannel, Interaction, VoiceState, Member
 from discord.ext import commands
-from discord.ui import View, LayoutView
+from discord.ui import View
 from discord import app_commands
 from lavalink import DefaultPlayer
 
-from utils.APIHandler import API
-from utils.Music import convert_to_ms, format_duration, format_lyrics_for_display
+from utils.APIHandler import API, ArchiveAPI
+from utils.Music import (convert_to_ms,
+                         format_duration,
+                         format_lyrics_for_display,
+                         delay_delete,
+                         send_message,
+                         MESSAGE_ALIVE_TIME)
 from lib.music.MusicLyrics import LyricsMenu, LyricsPagination
 from lib.music.Filters import filter_manager
 from lib.music.Types import AutoplayMode, PlayerStopped
 
 from lib.music.Decorators import message_error_handler, event_handler
 from lib.music.EmbedFactory import MusicEmbedFactory
-from lib.music.containers import NowPlayingContainer, QueueAddContainer, QueueContainer
-from lib.music.views import QueueLayoutView
+from lib.music.containers import NowPlayingContainer, QueueAddContainer, QueueContainer, RecentsContainer
+from lib.music.views import AutoDeleteLayoutView, build_view
 
 if TYPE_CHECKING:
     from lib.bot import MOCBOT
 
 
 class Music(commands.Cog):
-    MESSAGE_ALIVE_TIME = 10  # seconds
+    """Music cog for MOCBOT, handling music playback and commands."""
 
     def __init__(self, bot: "MOCBOT"):
         self.bot = bot
@@ -55,26 +60,6 @@ class Music(commands.Cog):
             self.service.emitter.off(event_name, method)
         self._registered_handlers.clear()
         self.logger.info("[COG] Unloaded %s", self.__class__.__name__)
-
-    async def send_message(self, interaction: Interaction, msg: str, ephemeral=False, followup=False):
-        """Helper function to send messages to the user."""
-        if followup:
-            await interaction.followup.send(embed=self.bot.create_embed("MOCBOT MUSIC", msg), ephemeral=ephemeral)
-        else:
-            await interaction.response.send_message(
-                embed=self.bot.create_embed("MOCBOT MUSIC", msg), ephemeral=ephemeral
-            )
-
-        if not ephemeral:
-            return await self.delay_delete(interaction, Music.MESSAGE_ALIVE_TIME)
-
-    async def delay_delete(self, interaction: Interaction, time: float):
-        """Helper function to delete a message after a delay."""
-        await asyncio.sleep(time)
-        try:
-            await interaction.delete_original_response()
-        except discord.errors.NotFound:
-            pass  # Message already deleted
 
     @event_handler("track_started")
     async def handle_track_start(self, player: DefaultPlayer):
@@ -146,7 +131,7 @@ class Music(commands.Cog):
         message = await channel.fetch_message(self.players[guild.id]["MESSAGE_ID"])
         # For some reason edit causes a ping despite the global disable, explicitly set allowed_mentions to none
         await message.edit(
-            view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)),
+            view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)),
             allowed_mentions=discord.AllowedMentions.none())
 
     async def send_new_now_playing(self, guild: Guild, player: DefaultPlayer):
@@ -156,7 +141,7 @@ class Music(commands.Cog):
         if message is not None:
             await message.delete()
         message = await channel.send(
-            view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
+            view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
         self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
 
     def retrieve_now_playing(self, channel: TextChannel, guild: Guild) -> PartialMessage | None:
@@ -205,22 +190,14 @@ class Music(commands.Cog):
                 return
 
             await channel.send(
-                view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
+                view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
             self.players[player.guild_id] = {"CHANNEL": channel.id, "MESSAGE_ID": channel.last_message_id}
             return
 
         await interaction.followup.send(
-            view=self.build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
+            view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
         message = await interaction.original_response()
         self.players[interaction.guild.id] = {"CHANNEL": interaction.channel.id, "MESSAGE_ID": message.id}
-
-    def build_view(self, container: discord.ui.Container, timeout=None) -> LayoutView:
-        """Build the now playing view for a player"""
-        view = discord.ui.LayoutView(timeout=timeout)
-        view.add_item(
-            container
-        )
-        return view
 
     @app_commands.command(
         name="play", description="Search and play media from YouTube, Spotify, SoundCloud, Apple Music etc."
@@ -238,10 +215,10 @@ class Music(commands.Cog):
         player = self.service.get_player_by_guild(interaction.guild.id)
 
         if result["was_playing"]:
-            view = QueueAddContainer(self.service,
-                                     player, result, self.bot, interaction, position=result["queue_position"])
-            await interaction.followup.send(view=self.build_view(view))
-            await self.delay_delete(interaction, Music.MESSAGE_ALIVE_TIME)
+            container = QueueAddContainer(self.service,
+                                          player, result, self.bot, interaction, position=result["queue_position"])
+            view = build_view(container, interaction, timeout=AutoDeleteLayoutView.QUEUE_ADD_TIMEOUT)
+            await interaction.followup.send(view=view)
         else:
             await self.handle_new_player(player, interaction=interaction)
 
@@ -254,7 +231,8 @@ class Music(commands.Cog):
     async def skip(self, interaction: Interaction, position: typing.Optional[int] = 1):
         """Skip the current track or a specific track in the queue."""
         result = await self.service.skip(interaction.guild.id, interaction.user.id, position)
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             f"Successfully skipped the track [{result['title']}]({result['uri']}).",
         )
@@ -264,7 +242,8 @@ class Music(commands.Cog):
     async def previous(self, interaction: Interaction):
         """Plays the previous track in the queue."""
         last_track = await self.service.previous(interaction.guild.id, interaction.user.id)
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             f"Successfully playing the previous track [{last_track['title']}]({last_track['uri']}).",
         )
@@ -274,8 +253,7 @@ class Music(commands.Cog):
         """Displays the current music queue."""
         player = self.service.get_player_by_guild(interaction.guild.id)
         container = QueueContainer(self.service, player, self.bot)
-        view = QueueLayoutView(interaction)
-        view.add_item(container)
+        view = build_view(container, interaction, timeout=AutoDeleteLayoutView.QUEUE_DISPLAY_TIMEOUT)
         await interaction.response.send_message(view=view)
 
     @app_commands.command(name="seek", description="Seeks the current song.")
@@ -284,14 +262,15 @@ class Music(commands.Cog):
     async def seek(self, interaction: Interaction, time: str):
         """Seek to a specific time in the current track."""
         if (time := convert_to_ms(time)) is None:
-            return await self.send_message(
+            return await send_message(
+                self.bot,
                 interaction,
                 "Please provide the time to seek in a suitable format.\nExamples: `10 | 1:10 | 1:10:10`",
                 ephemeral=True,
             )
 
         new_position = await self.service.seek(interaction.guild.id, interaction.user.id, time)
-        await self.send_message(interaction, f"Seeked to `{format_duration(new_position)}`.")
+        await send_message(self.bot, interaction, f"Seeked to `{format_duration(new_position)}`.")
 
     @app_commands.command(name="loop", description="Loop the current media or queue.")
     @message_error_handler()
@@ -302,21 +281,21 @@ class Music(commands.Cog):
         if result["autoplay_on"] and mode != "Off":
             msg += "\nNote: Autoplay is still enabled, but the set loop mode takes precedence."
 
-        await self.send_message(interaction, msg)
+        await send_message(self.bot, interaction, msg)
 
     @app_commands.command(name="disconnect", description="Disconnects the bot from voice.")
     @message_error_handler()
     async def disconnect(self, interaction: Interaction):
         """Disconnects the player from the voice channel and clears its queue."""
         await self.service.stop(interaction.guild.id, interaction.user.id, disconnect=True)
-        await self.send_message(interaction, "MOCBOT has been disconnected and the queue has been cleared.")
+        await send_message(self.bot, interaction, "MOCBOT has been disconnected and the queue has been cleared.")
 
     @app_commands.command(name="stop", description="Stops any media that is playing.")
     @message_error_handler()
     async def stop(self, interaction: Interaction):
         """Stops the player."""
         await self.service.stop(interaction.guild.id, interaction.user.id, disconnect=False)
-        await self.send_message(interaction, "Playback has been stopped and the queue has been cleared.")
+        await send_message(self.bot, interaction, "Playback has been stopped and the queue has been cleared.")
 
     @app_commands.command(name="filters", description="Toggles audio filters")
     @message_error_handler(ephemeral=False, followup=False)
@@ -324,7 +303,9 @@ class Music(commands.Cog):
         """Displays a dropdown menu to toggle audio filters."""
         player = self.service.get_player_by_guild(interaction.guild.id)
         if player is None or (not player.is_playing and not player.is_paused):
-            return await self.send_message(interaction, "This command can only be used while music is playing.", True)
+            return await send_message(self.bot,
+                                      interaction,
+                                      "This command can only be used while music is playing.", True)
         view = filter_manager.create_dropdown_view(self.service, interaction)
         await interaction.response.send_message(view=view)
 
@@ -333,21 +314,21 @@ class Music(commands.Cog):
     async def pause(self, interaction: Interaction):
         """Pauses the current track."""
         await self.service.pause(interaction.guild.id, interaction.user.id)
-        await self.send_message(interaction, "Media has been paused.")
+        await send_message(self.bot, interaction, "Media has been paused.")
 
     @app_commands.command(name="resume", description="Resumes the music")
     @message_error_handler()
     async def resume(self, interaction: Interaction):
         """Resumes the current track."""
         await self.service.resume(interaction.guild.id, interaction.user.id)
-        await self.send_message(interaction, "Media has been resumed.")
+        await send_message(self.bot, interaction, "Media has been resumed.")
 
     @app_commands.command(name="shuffle", description="Shuffles the queue")
     @message_error_handler()
     async def shuffle(self, interaction: Interaction):
         """Shuffles the current queue."""
         await self.service.shuffle(interaction.guild.id, interaction.user.id)
-        await self.send_message(interaction, "The queue has been shuffled.")
+        await send_message(self.bot, interaction, "The queue has been shuffled.")
 
     @app_commands.command(
         name="remove",
@@ -367,12 +348,14 @@ class Music(commands.Cog):
         """Removes one or more tracks from the queue."""
         result = await self.service.remove(interaction.guild.id, interaction.user.id, start, end)
         if isinstance(result, int):
-            await self.send_message(
+            await send_message(
+                self.bot,
                 interaction,
                 f"Successfully removed **{result}** track{'s' if result > 1 else ''} from the queue.",
             )
         else:
-            await self.send_message(
+            await send_message(
+                self.bot,
                 interaction,
                 f"Successfully removed the track [{result['title']}]({result['uri']}) from the queue.",
             )
@@ -389,7 +372,8 @@ class Music(commands.Cog):
     async def move(self, interaction: Interaction, source: int, destination: int):
         """Moves a track in the queue to a different position."""
         result = await self.service.move(interaction.guild.id, interaction.user.id, source, destination)
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             (
                 f"Successfully moved track [{result['title']}]({result['uri']}) "
@@ -406,7 +390,7 @@ class Music(commands.Cog):
         player = self.service.get_player_by_guild(interaction.guild.id)
 
         await interaction.response.send_message(embed=self.embeds.progress(player))
-        return await self.delay_delete(interaction, Music.MESSAGE_ALIVE_TIME * 2)
+        return await delay_delete(interaction, MESSAGE_ALIVE_TIME * 2)
 
     @app_commands.command(
         name="jump",
@@ -417,7 +401,8 @@ class Music(commands.Cog):
     async def jump(self, interaction: Interaction, position: int):
         """Jump to a specific track in the queue."""
         result = await self.service.jump(interaction.guild.id, interaction.user.id, position)
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             f"Successfully jumped to the track [{result['title']}]({result['uri']}).",
         )
@@ -430,7 +415,8 @@ class Music(commands.Cog):
         msg = f"Autoplaying has been {'enabled' if result['autoplay'] else 'disabled'} for the queue."
         if result["loop_on"] and mode == "On":
             msg += "\nNote: Looping is still enabled, and thus takes precedence over autoplay functionality."
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             msg,
         )
@@ -468,14 +454,15 @@ class Music(commands.Cog):
         """Rewind the current track by a specific amount of time."""
         converted_time = convert_to_ms(time)
         if converted_time == -1:
-            return await self.send_message(
+            return await send_message(
                 interaction,
                 "Please provide the time to rewind in a suitable format.\nExamples: `10 | 1:10 | 1:10:10`",
                 True,
             )
 
         result = await self.service.rewind(interaction.guild.id, interaction.user.id, converted_time)
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             f"Rewinded `{result['amount']}` to `{result['new_time_str']}`.",
         )
@@ -490,14 +477,15 @@ class Music(commands.Cog):
         """Fast forward the current track by a specific amount of time."""
         converted_time = convert_to_ms(time)
         if converted_time == -1:
-            return await self.send_message(
+            return await send_message(
                 interaction,
                 "Please provide the time to rewind in a suitable format.\nExamples: `10 | 1:10 | 1:10:10`",
                 True,
             )
 
         result = await self.service.fast_forward(interaction.guild.id, interaction.user.id, converted_time)
-        await self.send_message(
+        await send_message(
+            self.bot,
             interaction,
             f"Fast forwarded `{result['amount']}` to `{result['new_time_str']}`.",
         )
@@ -524,10 +512,10 @@ class Music(commands.Cog):
         if not result["was_playing"]:
             await self.handle_new_player(player, interaction=interaction)
         else:
-            view = QueueAddContainer(self.service,
-                                     player, result, self.bot, interaction, position=1, title="Playing Next")
-            await interaction.followup.send(view=self.build_view(view))
-            await self.delay_delete(interaction, Music.MESSAGE_ALIVE_TIME)
+            container = QueueAddContainer(self.service,
+                                          player, result, self.bot, interaction, position=1, title="Playing Next")
+            view = build_view(container, interaction, timeout=AutoDeleteLayoutView.QUEUE_ADD_TIMEOUT)
+            await interaction.followup.send(view=view)
 
     @app_commands.command(name="playnow", description="Skips the song and plays the requested track immediately.")
     @app_commands.describe(query="A search query or URL to the media.")
@@ -555,14 +543,15 @@ class Music(commands.Cog):
             return await self.handle_new_player(player, interaction=interaction)
 
         if continue_skipped == "Yes":
-            return await self.send_message(
+            return await send_message(
+                self.bot,
                 interaction,
                 f"The track [{skipped['title']}]({skipped['uri']}) will resume playing after the current track.",
                 followup=True,
             )
 
-        await self.send_message(
-            interaction, f"The track [{skipped['title']}]({skipped['uri']}) has been skipped.", followup=True
+        await send_message(
+            self.bot, interaction, f"The track [{skipped['title']}]({skipped['uri']}) has been skipped.", followup=True
         )
 
     @app_commands.command(name="music", description="Provides a link to the music dashboard")
@@ -585,6 +574,29 @@ class Music(commands.Cog):
             ),
             view=view,
         )
+
+    @app_commands.command(name="recents", description="Fetch your or the server's recently listened to tracks", )
+    @app_commands.describe(get_server="Fetch the server's recent tracks instead of your own")
+    async def recents(self, interaction: Interaction, get_server: typing.Optional[bool] = False):
+        """Sends a view displaying recent tracks for the user or server."""
+        await interaction.response.defer()
+
+        recents = []
+        if get_server:
+            recents = ArchiveAPI.get(f"/guilds/{interaction.guild.id}/tracks/recent?limit=50")
+        else:
+            recents = ArchiveAPI.get(f"/users/{interaction.user.id}/tracks/recent?limit=50")
+
+        container = RecentsContainer(
+            service=self.service,
+            bot=self.bot,
+            recents_data=recents,
+            is_server=get_server,
+        )
+
+        view = AutoDeleteLayoutView(interaction, timeout=AutoDeleteLayoutView.RECENTS_DISPLAY_TIMEOUT)
+        view.add_item(container)
+        await interaction.followup.send(view=view)
 
     @play.autocomplete("query")
     @play_next.autocomplete("query")
