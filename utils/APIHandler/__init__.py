@@ -6,7 +6,7 @@ import requests
 
 class BaseAPIClient:
     """Base API client with common HTTP methods."""
-    
+
     BASE_URL = None
     API_KEY = None
     LOGGER = logging.getLogger(__name__)
@@ -38,18 +38,20 @@ class BaseAPIClient:
         try:
             url = self.BASE_URL + route
             headers = {"X-API-KEY": self.API_KEY}
-            
+
             if method in ["POST", "PATCH", "PUT"]:
                 req = requests.request(method, url, headers=headers, json=body if body is not None else {}, timeout=10)
             else:
                 req = requests.request(method, url, headers=headers, timeout=10)
-            
+
             req.raise_for_status()
         except requests.exceptions.HTTPError as err:
             status = err.args[0].split(":")[0]
             self.LOGGER.error("[API] Request to %s failed with status %s", route, status)
             raise HTTPError(f"{status}", response=getattr(err, 'response', None)) from err
         else:
+            if req.status_code == 204:
+                return None
             return self.convert_to_int(req.json())
 
     @classmethod
@@ -80,7 +82,7 @@ class BaseAPIClient:
 
 class API(BaseAPIClient):
     """Main API client."""
-    
+
     BASE_URL = os.environ["API_URL"]
     with open(os.environ["API_KEY"], "r", encoding="utf-8") as f:
         API_KEY = f.read().strip()
@@ -88,7 +90,7 @@ class API(BaseAPIClient):
 
 class ArchiveAPI(BaseAPIClient):
     """Archive API client."""
-    
+
     BASE_URL = os.environ["ARCHIVE_API_URL"]
     with open(os.environ["ARCHIVE_API_KEY"], "r", encoding="utf-8") as f:
         API_KEY = f.read().strip()
