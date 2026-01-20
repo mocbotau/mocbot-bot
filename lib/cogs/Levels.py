@@ -147,7 +147,7 @@ class Levels(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if not message.author.bot and not message.interaction and message.guild:
+        if not message.author.bot and not message.interaction_metadata and message.guild:
             await self.message_xp(message)
 
     def check_level_up_perms(self, guild_id):
