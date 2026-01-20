@@ -2,7 +2,7 @@ from typing import TypedDict, Literal
 from ytmusicapi.models import LyricLine
 from lavalink import AudioTrack, DefaultPlayer
 
-AutoplayMode = Literal["Off", "On"]
+AutoplayMode = Literal["Off", "Related", "Recommended"]
 LoopMode = Literal["Off", "Song", "Queue"]
 
 
@@ -73,7 +73,7 @@ class AutoplayResponse(TypedDict):
     """Response structure for autoplay method
     We return whether loop is on or off to alert the user that looping takes precedence"""
 
-    autoplay: bool
+    autoplay: str
     loop_on: bool
 
 
@@ -89,6 +89,13 @@ class PlayerStopped(TypedDict):
 
     disconnect: bool
     player: DefaultPlayer
+
+
+class TrackStarted(TypedDict):
+    """Information about a started track"""
+
+    player: DefaultPlayer
+    track: AudioTrack
 
 
 class LyricsResponse(TypedDict):

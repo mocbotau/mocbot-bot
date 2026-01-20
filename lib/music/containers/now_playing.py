@@ -62,6 +62,22 @@ class NowPlayingContainer(BaseMusicContainer):
             )
         )
 
+        if player.fetch("autoplay", "Off") != "Off" and (len(player.queue) == 0 and player.loop is player.LOOP_NONE):
+            autoplay_mode = player.fetch("autoplay", "Recommended")
+            if autoplay_mode == "Recommended":
+                self.add_item(
+                    discord.ui.TextDisplay(
+                        "-# Autoplay will continue with tracks from: " + ", ".join(
+                            player.fetch("recommended_artists", []))
+                    )
+                )
+            elif autoplay_mode == "Related":
+                self.add_item(
+                    discord.ui.TextDisplay(
+                        "-# Autoplay will continue with similar tracks related to the current track"
+                    )
+                )
+
         buttons = discord.ui.ActionRow()
         self.prev_button = discord.ui.Button(
             emoji=discord.PartialEmoji(name="prev", id=1460504545489846398),
@@ -79,17 +95,25 @@ class NowPlayingContainer(BaseMusicContainer):
         )
         self.play_pause_button.callback = self.handle_play_pause
 
+        autoplay_off = player.fetch("autoplay", "Off") == "Off"
         self.next_button = discord.ui.Button(
             emoji=discord.PartialEmoji(name="next", id=1460504537784909834),
             style=discord.ButtonStyle.secondary,
-            disabled=(len(player.queue) == 0 and not player.fetch("autoplay") and player.loop is player.LOOP_NONE),
+            disabled=(len(player.queue) == 0 and autoplay_off and player.loop is player.LOOP_NONE),
         )
         self.next_button.callback = self.handle_next
 
+        autoplay_mode = player.fetch("autoplay", "Off")
+        autoplay_label_map = {
+            "Off": "Off",
+            "Related": "Related",
+            "Recommended": "Recommended"
+        }
+
         self.autoplay_button = discord.ui.Button(
             emoji=discord.PartialEmoji(name="autoplay", id=1460506638652805243),
-            label="Autoplay",
-            style=player.fetch("autoplay") and discord.ButtonStyle.blurple or discord.ButtonStyle.secondary,
+            label=f"Autoplay: {autoplay_label_map.get(autoplay_mode, 'Off')}",
+            style=discord.ButtonStyle.blurple if autoplay_mode != "Off" else discord.ButtonStyle.secondary,
         )
         self.autoplay_button.callback = self.handle_autoplay
 
@@ -119,7 +143,6 @@ class NowPlayingContainer(BaseMusicContainer):
     async def handle_prev(self, interaction: discord.Interaction):
         """Handle previous track button press"""
         await self.service.previous(interaction.guild.id, interaction.user.id)
-        await self._defer_and_update_view(interaction, self._refresh_view())
 
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_play_pause(self, interaction: discord.Interaction):
@@ -135,10 +158,17 @@ class NowPlayingContainer(BaseMusicContainer):
     async def handle_next(self, interaction: discord.Interaction):
         """Handle next track button press"""
         await self.service.skip(interaction.guild.id, interaction.user.id)
-        await self._defer_and_update_view(interaction, self._refresh_view())
 
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_autoplay(self, interaction: discord.Interaction):
-        """Handle autoplay toggle button press"""
-        await self.service.autoplay(interaction.guild.id, interaction.user.id)
+        """Handle autoplay mode cycle button press - cycles through Off -> Related -> Recommended -> Off"""
+        current_mode = self.player.fetch("autoplay", "Off")
+        mode_cycle = {
+            "Off": "Related",
+            "Related": "Recommended",
+            "Recommended": "Off"
+        }
+        next_mode = mode_cycle.get(current_mode, "Related")
+
+        await self.service.autoplay(interaction.guild.id, interaction.user.id, next_mode)
         await self._defer_and_update_view(interaction, self._refresh_view())

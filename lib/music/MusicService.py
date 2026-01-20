@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, Union
 from ytmusicapi import YTMusic
 import lavalink
 from lavalink import DefaultPlayer, LoadType, listener, LoadResult, AudioTrack
-from lavalink.events import TrackStartEvent, QueueEndEvent, TrackEndEvent
+from lavalink.events import TrackStartEvent, QueueEndEvent, TrackEndEvent, PlayerUpdateEvent
 
 from utils.APIHandler import ArchiveAPI
 from utils.ConfigHandler import Config
-from utils.Music import is_youtube_url, queue_length_msg, format_duration, create_id
+from utils.Music import queue_length_msg, format_duration, create_id
+from lib.music.AutoplayService import AutoplayService
 from lib.music.Decorators import event_handler
 from lib.music.Lavalink import LavalinkVoiceClient
 from lib.music.Filters import filter_manager
@@ -46,8 +47,6 @@ class MusicService:
         self.emitter = EventEmitter()
         self.logger = logging.getLogger(__name__)
         self.player_defaults: MusicServiceDefaults = {
-            "autoplay_load_buffer": 5,
-            "autoplay_buffer_min": 2,
             "max_history": 30,
             "seek_time": 15000,  # in milliseconds
             "volume": 10,
@@ -66,6 +65,7 @@ class MusicService:
         )
         self.lavalink.add_event_hooks(self)
 
+        self.autoplay_service = AutoplayService()
         self.emitter.on("player_stopped", self.end_session)
         self.sessions = {}
 
@@ -88,17 +88,16 @@ class MusicService:
             if not permissions.connect or not permissions.speak:
                 raise UserError("Please provide MOCBOT with CONNECT and SPEAK permissions.")
 
-            if guild_id not in self.sessions:
-                res = ArchiveAPI.post("/sessions", body={"guildId": guild_id})
-                if res.get("ID") is not None:
-                    self.sessions[guild_id] = res.get("ID")
-
             await user.voice.channel.connect(cls=LavalinkVoiceClient)
         else:
             if v_client.channel.id != user.voice.channel.id:
                 raise UserError("You need to be in my voice channel to execute that command.")
 
         player: DefaultPlayer = self.get_player_by_guild(guild_id)
+        # initialize autoplay service for this player
+        self.autoplay_service.set_node(player)
+        asyncio.create_task(self.autoplay_service.ensure_intent_buffer(guild_id))
+
         if not player:
             player = self.lavalink.player_manager.create(guild_id)
 
@@ -108,23 +107,28 @@ class MusicService:
     async def queue_end_hook(self, event: QueueEndEvent):
         """Handle the end of the music queue."""
         guild_id = event.player.guild_id
-        guild = self.bot.get_guild(guild_id)
         player = event.player
 
         emit_payload = {"disconnect": True, "player": player}
 
-        if player.fetch("autoplay"):
-            autoplay_queue = player.fetch("autoplay_queue", [])
-            if not autoplay_queue:
+        autoplay_mode = player.fetch("autoplay", "Off")
+        if autoplay_mode != "Off":
+            recently_played = player.fetch("recently_played", [])
+            last_track = recently_played[-1] if recently_played else None
+
+            track = await self.autoplay_service.get_next(
+                guild_id=guild_id,
+                mode=autoplay_mode,
+                current_track=last_track,
+            )
+
+            if track:
+                player.add(requester=None, track=track)
+                if not player.is_playing:
+                    await player.play()
+            else:
+                self.logger.error("[MUSIC] [%s] Failed to get autoplay track for mode: %s", guild_id, autoplay_mode)
                 asyncio.create_task(self.emitter.emit("player_stopped", emit_payload))
-                self.logger.error("[MUSIC] [{%s} // {%s}] Autoplay queue is empty, disconnecting.", guild, guild_id)
-                return
-
-            track = autoplay_queue.pop(0)
-            player.add(requester=None, track=track)
-
-            if not player.is_playing:
-                await player.play()
         else:
             asyncio.create_task(self.emitter.emit("player_stopped", emit_payload))
 
@@ -148,6 +152,7 @@ class MusicService:
         """Handle the start of a new track."""
         guild_id = event.player.guild_id
         guild = self.bot.get_guild(guild_id)
+        event.player.store("recommended_artists", self.autoplay_service.peek_intent(event.player.guild_id))
 
         # we fetch the full player so we can run clear_filters if needed. The BasePlayer class
         # returned from event.player is missing some methods.
@@ -166,19 +171,22 @@ class MusicService:
             await player.seek(track.position)
             track.position = 0  # Reset position after seeking
 
-        asyncio.create_task(self.emitter.emit("track_started", player))
-        asyncio.create_task(self.handle_autoplay(event))
-
-        # Don't add to session if looping single track. We would've already added it on first play, when loop was off
-        if player.loop == player.LOOP_SINGLE:
-            return
-
+        asyncio.create_task(self.emitter.emit("track_started", {"player": player, "track": track}))
         asyncio.create_task(self.add_track_to_session(guild_id, track))
 
     async def add_track_to_session(self, guild_id: int, track: AudioTrack):
         """Add a track to the current session."""
         session_id = self.sessions.get(guild_id)
         if session_id is None:
+            res = ArchiveAPI.post("/sessions", body={"guildId": guild_id})
+            if res.get("ID") is not None:
+                session_id = res.get("ID")
+                self.sessions[guild_id] = session_id
+
+        if session_id is None:
+            return  # if it failed to create a session, we skip adding the track and try again next time
+
+        if track.extra.get("archive_track_id") is not None:
             return
 
         users_in_voice_channel = []
@@ -206,11 +214,21 @@ class MusicService:
         if res.get("ID") is not None:
             track.extra["archive_track_id"] = res.get("ID")
 
+    @listener(PlayerUpdateEvent)
+    async def player_update_hook(self, event: PlayerUpdateEvent):
+        """Handle player update events."""
+        player = event.player
+
+        # We store the custom position separately as lavalink resets the position on its end once the track ends
+        player.current.extra["custom_position"] = event.position
+
     @listener(TrackEndEvent)
     async def track_end_hook(self, event: TrackEndEvent):
         """Handle the end of a track."""
         if event.track is None:
             return  # skip adding to avoid errors
+
+        asyncio.create_task(self.end_track_session(event.player.guild_id, event.track))
 
         # Skip adding to history if this track end was caused by a call to previous
         if event.player.fetch("skip_history_update", False):
@@ -229,7 +247,6 @@ class MusicService:
         event.track.position = 0  # Reset position before adding to history
         recently_played.append(event.track)
         event.player.store("recently_played", recently_played)
-        asyncio.create_task(self.end_track_session(event.player.guild_id, event.track))
 
     async def end_track_session(self, guild_id: int, track: AudioTrack):
         """Mark a track as ended in the current session."""
@@ -241,37 +258,17 @@ class MusicService:
         if archive_track_id is None:
             return
 
-        ArchiveAPI.patch(f"/tracks/{archive_track_id}")
+        res = ArchiveAPI.patch(f"/tracks/{archive_track_id}",
+                               body={"playedDurationMs": track.extra.get("custom_position", 0)})
 
-    async def handle_autoplay(self, event: TrackEndEvent):
-        """Handles saving a few tracks to an auto-play queue to speed up auto-queueing."""
-        guild_id = event.player.guild_id
-        guild = self.bot.get_guild(guild_id)
-        player = event.player
-
-        autoplay_queue = player.fetch("autoplay_queue", [])
-        # We'll refill when there's 2 or less tracks left
-        if len(autoplay_queue) > self.player_defaults["autoplay_buffer_min"]:
-            return
-
-        track = player.current
-
-        if not is_youtube_url(track.uri):
-            youtube_res = await player.node.get_tracks(f"ytsearch:{track.title} {track.author}")
-            track = youtube_res.tracks[0]
-
-        results = await player.node.get_tracks(track.uri + f"&list=RD{track.identifier}")
-        if not results or not results.tracks:
-            self.logger.error("[MUSIC] [%s] // {%s}] Autoplay failed to find related tracks.", guild, guild_id)
-
-        max_index = min(len(results.tracks), self.player_defaults["autoplay_load_buffer"]) + 1
-
-        # we skip the first track as it's the current one
-        new_tracks = results.tracks[1:max_index]
-        for track in new_tracks:
-            track.extra["id"] = create_id()
-        autoplay_queue.extend(new_tracks)
-        player.store("autoplay_queue", autoplay_queue)
+        # If res is None, this represents a 204 which means the track archive was deleted because it
+        # wasn't played long enough to qualify as a track play. Marking this ID as None allows the track
+        # to 'qualify' as a valid play again if it's re-added to the queue later.
+        # Otherwise, if the track was played enough to be recorded, we leave the ID as-is. This prevents
+        # this particular track instance from being recorded multiple times in the same session, such as
+        # in a loop scenario.
+        if res is None:
+            track.extra["archive_track_id"] = None
 
     def get_player_by_guild(self, guild_id: int) -> DefaultPlayer | None:
         """Get the lavalink player for a specific guild."""
@@ -432,10 +429,9 @@ class MusicService:
     async def skip(self, guild_id: int, user_id: int, position: int = 1) -> SingleTrackResponse:
         """Skip the current track or a specific track in the queue."""
         player = await self.ensure_voice(guild_id, user_id)
+        autoplay_is_off = player.fetch("autoplay", "Off") == "Off"
 
-        if position < 1 or (
-            position > len(player.queue) and not player.fetch("autoplay") and player.loop == player.LOOP_NONE
-        ):
+        if position < 1 or position > len(player.queue) and autoplay_is_off and player.loop == player.LOOP_NONE:
             raise UserError("You may only skip to a track within the queue.")
 
         player.queue = player.queue[position - 1 :]
@@ -502,7 +498,7 @@ class MusicService:
         asyncio.create_task(self.emitter.emit("player_state_update", player))
         return {
             # We return the autoplay status to notify users that loop mode takes precedence
-            "autoplay_on": player.fetch("autoplay", False),
+            "autoplay_on": player.fetch("autoplay", "Off") != "Off",
         }
 
     async def stop(self, guild_id: int, user_id: int, disconnect=False) -> None:
@@ -514,7 +510,6 @@ class MusicService:
 
         player.queue.clear()
         # reset custom stored values
-        player.store("autoplay_queue", [])
         player.store("recently_played", [])
         player.store("autoplay", False)
         player.store("skip_history_update", False)
@@ -633,19 +628,19 @@ class MusicService:
         player = await self.ensure_voice(guild_id, user_id)
 
         if mode is None:
-            player.store("autoplay", not player.fetch("autoplay", False))
-        else:
-            match mode:
-                case "Off":
-                    player.store("autoplay", False)
-                case "On":
-                    player.store("autoplay", True)
+            current_mode = player.fetch("autoplay", "Off")
+            if current_mode == "Off":
+                mode = "Recommended"
+            else:
+                mode = "Off"
+
+        player.store("autoplay", mode)
 
         asyncio.create_task(self.emitter.emit("now_playing_update", player))
         asyncio.create_task(self.emitter.emit("player_state_update", player))
 
         return {
-            "autoplay": player.fetch("autoplay", False),
+            "autoplay": mode,
             # We return the loop status to notify users that loop mode takes precedence
             "loop_on": player.loop != player.LOOP_NONE,
         }

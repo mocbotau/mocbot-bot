@@ -167,7 +167,7 @@ class MusicSocket(socketio.AsyncNamespace):
     async def _build_player_state(self, player: Optional[DefaultPlayer]) -> Dict[str, Any]:
         if not player:
             return {
-                "autoplay": False,
+                "autoplay": "Off",
                 "isConnected": False,
                 "isPlaying": False,
                 "paused": False,
@@ -178,7 +178,7 @@ class MusicSocket(socketio.AsyncNamespace):
             }
 
         return {
-            "autoplay": player.fetch("autoplay", False),
+            "autoplay": player.fetch("autoplay", "Off"),
             "isConnected": True,
             "isPlaying": player.is_playing,
             "paused": player.paused,
@@ -247,8 +247,13 @@ class MusicSocket(socketio.AsyncNamespace):
 
     @event_handler("state_update")
     @event_handler("track_started")
-    async def emit_state_update(self, player: Optional[DefaultPlayer], guild_id: int = None) -> None:
+    async def emit_state_update(self, data: Any = None, guild_id: int = None) -> None:
         """Emit full state update including player state, current track, and queue"""
+        if isinstance(data, dict) and "player" in data:
+            player = data["player"]
+        else:
+            player = data
+
         state = {
             **await self._build_player_state(player),
             "currentSong": await self._build_current_track(player),
@@ -390,9 +395,15 @@ class MusicSocket(socketio.AsyncNamespace):
         await self.service.loop(self.ctx.guild_id, self.ctx.user_id, loop_mode)
 
     @music_action(requires_user_id=True)
-    async def on_toggle_autoplay(self, _data: Dict[str, Any]) -> None:
-        """Toggle autoplay mode"""
-        await self.service.autoplay(self.ctx.guild_id, self.ctx.user_id)
+    async def on_set_autoplay(self, data: Dict[str, Any]) -> None:
+        """Set autoplay mode"""
+        mode = data.get("mode")
+
+        if not mode or mode not in ["Off", "Related", "Recommended"]:
+            await self.emit("user_error", {"room": self.ctx.socket_id, "message": "Invalid autoplay mode"})
+            return
+
+        await self.service.autoplay(self.ctx.guild_id, self.ctx.user_id, mode)
 
     @music_action(requires_user_id=True)
     async def on_shuffle_queue(self, _data: Dict[str, Any]) -> None:

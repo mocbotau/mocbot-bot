@@ -22,7 +22,7 @@ from utils.Music import (convert_to_ms,
                          MESSAGE_ALIVE_TIME)
 from lib.music.MusicLyrics import LyricsMenu, LyricsPagination
 from lib.music.Filters import filter_manager
-from lib.music.Types import AutoplayMode, PlayerStopped
+from lib.music.Types import AutoplayMode, PlayerStopped, TrackStarted
 
 from lib.music.Decorators import message_error_handler, event_handler
 from lib.music.EmbedFactory import MusicEmbedFactory
@@ -62,16 +62,18 @@ class Music(commands.Cog):
         self.logger.info("[COG] Unloaded %s", self.__class__.__name__)
 
     @event_handler("track_started")
-    async def handle_track_start(self, player: DefaultPlayer):
+    async def handle_track_start(self, data: TrackStarted):
         """Handle the start of a track for a guild"""
+        player = data["player"]
+        track = data["track"]
         guild_id = player.guild_id
         guild = self.bot.get_guild(guild_id)
 
         if guild_id not in self.players:
-            await self.handle_new_player(player)
+            await self.handle_new_player(player, track=track)
             return
 
-        await self.send_new_now_playing(guild, player)
+        await self.send_new_now_playing(guild, player, track)
 
     @event_handler("now_playing_update")
     @event_handler("queue_update")
@@ -123,7 +125,7 @@ class Music(commands.Cog):
                 if hasattr(member.guild.voice_client, "channel"):
                     member.guild.voice_client.channel = after.channel
 
-            self.service.emitter.emit("player_state_update", player)
+            await self.service.emitter.emit("player_state_update", player)
 
     async def update_now_playing(self, guild: Guild, player: DefaultPlayer):
         """Update the now playing message for a guild"""
@@ -134,14 +136,16 @@ class Music(commands.Cog):
             view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)),
             allowed_mentions=discord.AllowedMentions.none())
 
-    async def send_new_now_playing(self, guild: Guild, player: DefaultPlayer):
+    async def send_new_now_playing(self, guild: Guild, player: DefaultPlayer, track=None):
         """Send a new now playing message for a guild"""
         channel = guild.get_channel(self.players[guild.id]["CHANNEL"])
         message = self.retrieve_now_playing(channel, guild)
         if message is not None:
             await message.delete()
+
+        current_track = track if track is not None else player.current
         message = await channel.send(
-            view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
+            view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
         self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
 
     def retrieve_now_playing(self, channel: TextChannel, guild: Guild) -> PartialMessage | None:
@@ -177,8 +181,10 @@ class Music(commands.Cog):
 
         return channel
 
-    async def handle_new_player(self, player: DefaultPlayer, interaction: Interaction = None):
+    async def handle_new_player(self, player: DefaultPlayer, interaction: Interaction = None, track=None):
         """Handle setting up a new player for a guild"""
+        current_track = track if track is not None else player.current
+
         if interaction is None:
             handle_new_player = player.fetch("handle_new_player", True)
             player.store("handle_new_player", True)
@@ -190,12 +196,12 @@ class Music(commands.Cog):
                 return
 
             await channel.send(
-                view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
+                view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
             self.players[player.guild_id] = {"CHANNEL": channel.id, "MESSAGE_ID": channel.last_message_id}
             return
 
         await interaction.followup.send(
-            view=build_view(NowPlayingContainer(self.service, player, player.current, self.bot)))
+            view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
         message = await interaction.original_response()
         self.players[interaction.guild.id] = {"CHANNEL": interaction.channel.id, "MESSAGE_ID": message.id}
 
@@ -407,13 +413,32 @@ class Music(commands.Cog):
             f"Successfully jumped to the track [{result['title']}]({result['uri']}).",
         )
 
-    @app_commands.command(name="autoplay", description="Toggles auto playing on or off")
+    @app_commands.command(name="autoplay", description="Set autoplay mode")
+    @app_commands.choices(mode=[
+        app_commands.Choice(
+            name="Off",
+            value="Off",
+        ),
+        app_commands.Choice(
+            name="Related - Based on current track",
+            value="Related"
+        ),
+        app_commands.Choice(
+            name="Recommended - Based on server listening history",
+            value="Recommended"
+        ),
+    ])
     @message_error_handler()
     async def autoplay(self, interaction: Interaction, mode: AutoplayMode):
-        """Toggles autoplay on or off."""
+        """Sets the autoplay mode."""
         result = await self.service.autoplay(interaction.guild.id, interaction.user.id, mode)
-        msg = f"Autoplaying has been {'enabled' if result['autoplay'] else 'disabled'} for the queue."
-        if result["loop_on"] and mode == "On":
+
+        if result['autoplay'] != "Off":
+            msg = f"Autoplay set to **{result['autoplay']}**."
+        else:
+            msg = "Autoplay has been disabled."
+
+        if result["loop_on"] and mode != "Off":
             msg += "\nNote: Looping is still enabled, and thus takes precedence over autoplay functionality."
         await send_message(
             self.bot,
@@ -607,7 +632,7 @@ class Music(commands.Cog):
         """Clears the current music queue."""
         await self.service.clear_queue(interaction.guild.id, interaction.user.id)
         await send_message(self.bot, interaction, "The music queue has been cleared.")
-    
+
     @play.autocomplete("query")
     @play_next.autocomplete("query")
     @play_now.autocomplete("query")
