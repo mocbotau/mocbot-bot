@@ -51,7 +51,7 @@ deployments:
 
 statefulSets:
   - name: "lavalink"
-    image: "ghcr.io/lavalink-devs/lavalink:4"
+    image: "ghcr.io/lavalink-devs/lavalink:4.1.2-alpine"
     updateStrategy: "OnDelete"
     config:
       fileVariable: "lavalinkConfig"
