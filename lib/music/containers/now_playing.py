@@ -68,7 +68,7 @@ class NowPlayingContainer(BaseMusicContainer):
                 self.add_item(
                     discord.ui.TextDisplay(
                         "-# Autoplay will continue with tracks from: " + ", ".join(
-                            player.fetch("recommended_artists", []))
+                            list(dict.fromkeys(player.fetch("recommended_artists", []))))
                     )
                 )
             elif autoplay_mode == "Related":
