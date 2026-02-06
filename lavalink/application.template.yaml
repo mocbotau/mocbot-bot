@@ -44,7 +44,7 @@ plugins:
     clients:
       - MUSIC
       - WEB
-      - TVHTML5EMBEDDED
+      - TV
   lavasrc:
     providers:
       - 'ytsearch:"%ISRC%"'
