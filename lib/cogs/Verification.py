@@ -102,7 +102,7 @@ class Verification(commands.Cog):
 
         if (int(verification_role_id) in member_role_ids or int(lockdown_role_id) in member_role_ids) and len(
             member_role_ids
-        ) == 2:
+        ) >= 2:
             if kwargs.get("captcha") is None or (
                 kwargs.get("captcha") is not None and kwargs.get("captcha")["score"] >= 0.7
             ):
