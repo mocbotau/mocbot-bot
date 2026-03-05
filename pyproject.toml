@@ -21,9 +21,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.10"
 discord-ext-menus = "1.1.0"
-discord-py = "2.6.4"
+discord-py = {version = "2.7.1", extras = ["voice"]}
 expiringdict = "1.2.2"
-lavalink = "5.7.1"
+lavalink = "5.10.0"
 pillow = "9.3.0"
 python-socketio = "5.11.0"
 pyyaml = "6.0.1"
