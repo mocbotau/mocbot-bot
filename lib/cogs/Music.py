@@ -138,15 +138,20 @@ class Music(commands.Cog):
 
     async def send_new_now_playing(self, guild: Guild, player: DefaultPlayer, track=None):
         """Send a new now playing message for a guild"""
-        channel = guild.get_channel(self.players[guild.id]["CHANNEL"])
-        message = self.retrieve_now_playing(channel, guild)
-        if message is not None:
-            await message.delete()
+        try:
+            channel = guild.get_channel(self.players[guild.id]["CHANNEL"])
+            message = self.retrieve_now_playing(channel, guild)
+            if message is not None:
+                await message.delete()
 
-        current_track = track if track is not None else player.current
-        message = await channel.send(
-            view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
-        self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
+            current_track = track if track is not None else player.current
+            message = await channel.send(
+                view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
+            self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
+        except Exception as e:
+            self.logger.exception(
+                "Failed to send now playing message for guild %s: %s", guild.id, str(e), exc_info=e
+            )
 
     def retrieve_now_playing(self, channel: TextChannel, guild: Guild) -> PartialMessage | None:
         """Retrieve the now playing message for a guild, returning a partial message to save on API calls"""

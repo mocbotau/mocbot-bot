@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, Literal, Union, Dict, Any, List
 from lavalink.events import TrackEndEvent, TrackStartEvent
 from lavalink import DefaultPlayer
@@ -18,6 +19,8 @@ EventName = Literal[
 PlayerStatePayload = Dict[str, Any]
 StateUpdatePayload = Dict[str, Any]
 QueueUpdatePayload = List[Dict[str, Any]]
+
+logger = logging.getLogger(__name__)
 
 
 class EventEmitter:
@@ -52,4 +55,13 @@ class EventEmitter:
     ) -> None:
         """Emit an event, calling all registered listeners with the provided payload."""
         for cb in self._listeners.get(event, []):
-            await cb(payload)
+            try:
+                await cb(payload)
+            except Exception:
+                logger.exception(
+                    "Unhandled exception in music event listener",
+                    extra={
+                        "event_name": event,
+                        "callback": getattr(cb, "__qualname__", repr(cb)),
+                    },
+                )
