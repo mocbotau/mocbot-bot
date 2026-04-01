@@ -1,4 +1,5 @@
 import re
+import random
 import asyncio
 import typing
 import logging
@@ -17,16 +18,18 @@ from utils.APIHandler import API, ArchiveAPI
 from utils.Music import (convert_to_ms,
                          format_duration,
                          format_lyrics_for_display,
-                         delay_delete,
-                         send_message,
-                         MESSAGE_ALIVE_TIME)
+                         send_message)
 from lib.music.MusicLyrics import LyricsMenu, LyricsPagination
 from lib.music.Filters import filter_manager
 from lib.music.Types import AutoplayMode, PlayerStopped, TrackStarted
 
 from lib.music.Decorators import message_error_handler, event_handler
-from lib.music.EmbedFactory import MusicEmbedFactory
-from lib.music.containers import NowPlayingContainer, QueueAddContainer, QueueContainer, RecentsContainer
+from lib.music.containers import (
+    NowPlayingContainer,
+    QueueAddContainer,
+    QueueContainer,
+    RecentsContainer,
+)
 from lib.music.views import AutoDeleteLayoutView, build_view
 
 if TYPE_CHECKING:
@@ -38,9 +41,9 @@ class Music(commands.Cog):
 
     def __init__(self, bot: "MOCBOT"):
         self.bot = bot
-        self.embeds = MusicEmbedFactory(bot)
         self.logger = logging.getLogger(__name__)
         self.players = {}
+        self._now_playing_refresh_tasks: dict[int, asyncio.Task] = {}
         self._registered_handlers: list[tuple[str, Callable]] = []
         self.service = bot.music_service
 
@@ -59,7 +62,42 @@ class Music(commands.Cog):
         for event_name, method in self._registered_handlers:
             self.service.emitter.off(event_name, method)
         self._registered_handlers.clear()
+
+        for task in self._now_playing_refresh_tasks.values():
+            task.cancel()
+        self._now_playing_refresh_tasks.clear()
+
         self.logger.info("[COG] Unloaded %s", self.__class__.__name__)
+
+    def _start_now_playing_refresh_loop(self, guild_id: int):
+        """Ensure there is a periodic refresh loop for the guild's now playing message."""
+        task = self._now_playing_refresh_tasks.get(guild_id)
+        if task and not task.done():
+            return
+
+        self._now_playing_refresh_tasks[guild_id] = asyncio.create_task(self._now_playing_refresh_loop(guild_id))
+
+    def _stop_now_playing_refresh_loop(self, guild_id: int):
+        """Stop periodic now playing refresh for the guild if it exists."""
+        task = self._now_playing_refresh_tasks.pop(guild_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    async def _now_playing_refresh_loop(self, guild_id: int):
+        """Periodically refresh now playing view to keep the progress bar updated."""
+        while guild_id in self.players:
+            # Add some jitter to avoid hitting at exact intervals
+            await asyncio.sleep(NowPlayingContainer.REFRESH_INTERVAL + random.uniform(-3, 3))
+
+            if guild_id not in self.players:
+                break
+
+            guild = self.bot.get_guild(guild_id)
+            player = self.service.get_player_by_guild(guild_id)
+            if not guild or not player or not player.current:
+                continue
+
+            await self.update_now_playing(guild, player)
 
     @event_handler("track_started")
     async def handle_track_start(self, data: TrackStarted):
@@ -75,6 +113,7 @@ class Music(commands.Cog):
 
         await self.send_new_now_playing(guild, player, track)
 
+    @event_handler("current_position_update")
     @event_handler("now_playing_update")
     @event_handler("queue_update")
     async def handle_now_playing_update(self, player: DefaultPlayer):
@@ -91,6 +130,8 @@ class Music(commands.Cog):
         player = data["player"]
         guild_id = player.guild_id
         guild = self.bot.get_guild(guild_id)
+
+        self._stop_now_playing_refresh_loop(guild_id)
 
         disconnect = data.get("disconnect", False)
         if disconnect:
@@ -148,6 +189,7 @@ class Music(commands.Cog):
             message = await channel.send(
                 view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
             self.players[guild.id] = {"CHANNEL": channel.id, "MESSAGE_ID": message.id, "FIRST": False}
+            self._start_now_playing_refresh_loop(guild.id)
         except Exception as e:
             self.logger.exception(
                 "Failed to send now playing message for guild %s: %s", guild.id, str(e), exc_info=e
@@ -203,12 +245,14 @@ class Music(commands.Cog):
             await channel.send(
                 view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
             self.players[player.guild_id] = {"CHANNEL": channel.id, "MESSAGE_ID": channel.last_message_id}
+            self._start_now_playing_refresh_loop(player.guild_id)
             return
 
         await interaction.followup.send(
             view=build_view(NowPlayingContainer(self.service, player, current_track, self.bot)))
         message = await interaction.original_response()
         self.players[interaction.guild.id] = {"CHANNEL": interaction.channel.id, "MESSAGE_ID": message.id}
+        self._start_now_playing_refresh_loop(interaction.guild.id)
 
     @app_commands.command(
         name="play", description="Search and play media from YouTube, Spotify, SoundCloud, Apple Music etc."
@@ -391,17 +435,6 @@ class Music(commands.Cog):
                 f"to position **{result['new_position']}** in the queue."
             ),
         )
-
-    @app_commands.command(
-        name="nowplaying",
-        description="Sends a message regarding the currently playing song and its progress",
-    )
-    async def now_playing(self, interaction: Interaction):
-        """Displays the currently playing track."""
-        player = self.service.get_player_by_guild(interaction.guild.id)
-
-        await interaction.response.send_message(embed=self.embeds.progress(player))
-        return await delay_delete(interaction, MESSAGE_ALIVE_TIME * 2)
 
     @app_commands.command(
         name="jump",
@@ -637,6 +670,73 @@ class Music(commands.Cog):
         """Clears the current music queue."""
         await self.service.clear_queue(interaction.guild.id, interaction.user.id)
         await send_message(self.bot, interaction, "The music queue has been cleared.")
+
+    @app_commands.command(
+        name="vibe",
+        description="Build a quick queue based on a selected vibe and kick off the session.",
+    )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Chill", value="chill"),
+        app_commands.Choice(name="Upbeat", value="upbeat"),
+        app_commands.Choice(name="Trending", value="trending"),
+        app_commands.Choice(name="Throwback", value="throwback"),
+        app_commands.Choice(name="Sad", value="sad"),
+        app_commands.Choice(name="Metal", value="metal"),
+        app_commands.Choice(name="Recommended", value="recommended"),
+    ])
+    @app_commands.describe(
+        mode="The vibe mode to build a queue from.",
+    )
+    @message_error_handler(ephemeral=False, followup=True)
+    async def vibe(
+        self,
+        interaction: Interaction,
+        mode: Literal["chill", "upbeat", "trending", "throwback", "sad", "metal", "recommended"] = "recommended",
+    ):
+        """Queue random songs based on a vibe or server recommendations.
+        Defaults to server recommendations if no mode is specified."""
+        await interaction.response.defer(thinking=True)
+        recommended = mode == "recommended"
+
+        selected_uris, recommended_artists = await self.service.get_vibe_track_uris(
+            guild_id=interaction.guild.id,
+            user_id=interaction.user.id,
+            mode=mode,
+        )
+
+        if not selected_uris:
+            context = "server recommendations" if recommended else f"**{mode}** mode"
+            return await send_message(
+                self.bot,
+                interaction,
+                f"Couldn't find tracks from {context} right now.",
+                followup=True,
+            )
+
+        result = await self.service.play_tracks(
+            guild_id=interaction.guild.id,
+            user_id=interaction.user.id,
+            queries=selected_uris,
+            handle_new_player=False,
+        )
+
+        if recommended:
+            top_artists = ", ".join(recommended_artists[:3])
+            queued_msg = (
+                f"Queued **{len(selected_uris)}** tracks from server recommendations."
+            )
+            if top_artists:
+                queued_msg += f"\nUsing artists like: **{top_artists}**"
+        else:
+            queued_msg = (
+                f"Queued **{len(selected_uris)}** tracks from **{mode}** mode."
+            )
+
+        if not result["was_playing"]:
+            player = self.service.get_player_by_guild(interaction.guild.id)
+            await self.handle_new_player(player, interaction=interaction)
+        else:
+            await send_message(self.bot, interaction, queued_msg, followup=True)
 
     @play.autocomplete("query")
     @play_next.autocomplete("query")

@@ -2,8 +2,10 @@ import discord
 from lavalink import DefaultPlayer
 
 from lib.bot import MOCBOT
+from lib.music.Exceptions import UserError
 from lib.music.MusicService import MusicService
 from lib.music.containers.base import PaginatedContainer
+from utils.Music import send_message
 from utils.Music import format_duration
 
 
@@ -64,7 +66,7 @@ class QueueContainer(PaginatedContainer):
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"delete_{idx}",
             )
-            delete_button.callback = self._make_delete_callback(idx, track)
+            delete_button.callback = self._make_delete_callback(track)
 
             self.add_item(discord.ui.Section(
                 discord.ui.TextDisplay(line_text),
@@ -83,10 +85,10 @@ class QueueContainer(PaginatedContainer):
             discord.ui.TextDisplay(f"-# {stat_string}"),
         )
 
-    def _make_delete_callback(self, queue_position: int, track):
+    def _make_delete_callback(self, track):
         """Create a callback function for deleting a specific track."""
         async def delete_callback(interaction: discord.Interaction):
-            await self.handle_delete(interaction, queue_position, track)
+            await self.handle_delete(interaction, track.extra.get("id"))
         return delete_callback
 
     def _get_total_items(self) -> int:
@@ -100,9 +102,14 @@ class QueueContainer(PaginatedContainer):
         view.add_item(new_container)
         return view
 
-    async def handle_delete(self, interaction: discord.Interaction, queue_position: int, _track):
+    async def handle_delete(self, interaction: discord.Interaction, track_id: str | None):
         """Handle delete button press for a specific track."""
-        await self.service.remove(interaction.guild.id, interaction.user.id, queue_position + 1)
+        try:
+            queue_position = self.resolve_queue_position(interaction.guild.id, track_id)
+            await self.service.remove(interaction.guild.id, interaction.user.id, queue_position)
+        except UserError as e:
+            await send_message(self.bot, interaction, str(e), ephemeral=True)
+            return
 
         total_tracks = self._get_total_items()
         max_pages = max(1, (total_tracks + self.per_page - 1) // self.per_page) if total_tracks > 0 else 1
