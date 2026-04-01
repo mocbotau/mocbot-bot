@@ -35,6 +35,31 @@ from lib.music.Types import (
     RewindOrFFResponse,
 )
 
+VIBE_PLAYLIST_URLS = {
+    "chill": [
+        "https://www.youtube.com/playlist?list=PLgzTt0k8mXzEpH7-dOCHqRZOsakqXmzmG",
+        "https://www.youtube.com/playlist?list=PL4QNnZJr8sRPmuz_d87ygGR6YAYEF-fmw",
+    ],
+    "upbeat": [
+        "https://www.youtube.com/playlist?list=PLlplKg2KQ6rgi0Mom4KTTrURNIw6e_uxl",
+    ],
+    "trending": [
+        "https://www.youtube.com/playlist?list=PL4fGSI1pDJn7xvYy-bP6UFeG5tITQgScd",
+        "https://www.youtube.com/playlist?list=PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i",
+    ],
+    "throwback": [
+        "https://www.youtube.com/playlist?list=PLz8cxnYPx0tkfCi6drRRKALyIl2sJjEwq",
+        "https://www.youtube.com/playlist?list=PL4C44E2875308A280",
+    ],
+    "sad": [
+        "https://www.youtube.com/playlist?list=PL5D7fjEEs5yflZzSZAhxfgQmN6C_6UJ1W",
+    ],
+    "metal": [
+        "https://www.youtube.com/playlist?list=PLI_7Mg2Z_-4ILvVfREVnSZ6yIFKLeLaLQ",
+    ],
+}
+VIBE_MAX_TRACK_DURATION: int = 5 * 60 * 1000  # 5 minutes - to avoid long playlist tracks
+
 if TYPE_CHECKING:
     from lib.bot import MOCBOT
 
@@ -94,12 +119,12 @@ class MusicService:
                 raise UserError("You need to be in my voice channel to execute that command.")
 
         player: DefaultPlayer = self.get_player_by_guild(guild_id)
+        if not player:
+            player = self.lavalink.player_manager.create(guild_id)
+
         # initialize autoplay service for this player
         self.autoplay_service.set_node(player)
         asyncio.create_task(self.autoplay_service.ensure_intent_buffer(guild_id))
-
-        if not player:
-            player = self.lavalink.player_manager.create(guild_id)
 
         return player
 
@@ -760,3 +785,85 @@ class MusicService:
             "title": t[0].get("title"),
             "artists": artists,
         }
+
+    async def get_recommended_artists(
+        self,
+        guild_id: int,
+        user_id: int,
+        count: int = 10,
+        refresh: bool = True,
+    ) -> list[str]:
+        """Fetch weighted recommended artists for the guild, optionally refreshing cache."""
+        player = await self.ensure_voice(guild_id, user_id, should_connect=True)
+        self.autoplay_service.set_node(player)
+
+        artists = await self.autoplay_service.sample_recommended_artists(guild_id, count=count, refresh=refresh)
+
+        if artists:
+            player.store("recommended_artists", artists)
+
+        return artists
+
+    async def get_vibe_track_uris(
+        self,
+        guild_id: int,
+        user_id: int,
+        mode: str = "recommended",
+        tracks: int = 5,
+    ) -> tuple[list[str], list[str]]:
+        """Build a randomized vibe selection and return (selected_track_uris, recommended_artists)."""
+        recommended_artists: list[str] = []
+        candidate_uris: list[str] = []
+
+        if mode == "recommended":
+            recommended_artists = await self.get_recommended_artists(
+                guild_id=guild_id,
+                user_id=user_id,
+                count=10,
+                refresh=True,
+            )
+
+            if not recommended_artists:
+                raise UserError(
+                    "No recommendations are available yet. Play some songs and try again."
+                )
+
+            selected_artists = random.sample(recommended_artists, k=min(tracks, len(recommended_artists)))
+            artist_queries = [self._prepare_query(artist)[0] for artist in selected_artists]
+            search_results = await asyncio.gather(
+                *(self.search(query) for query in artist_queries),
+                return_exceptions=True,
+            )
+
+            for results in search_results:
+                if isinstance(results, Exception):
+                    self.logger.warning("[MUSIC] [%s] Failed to fetch a vibe artist result: %s", guild_id, results)
+                    continue
+                if not results or not results.tracks:
+                    continue
+
+                candidates = self._filter_vibe_candidates(results)
+                random_candidate = random.choice(candidates) if candidates else None
+                if random_candidate:
+                    candidate_uris.append(random_candidate.uri)
+        else:
+            mode_playlists = VIBE_PLAYLIST_URLS.get(mode, [])
+            if not mode_playlists:
+                return [], recommended_artists
+
+            results = await self.search(random.choice(mode_playlists))
+            if not results or not results.tracks:
+                return [], recommended_artists
+
+            candidate_uris = [track.uri for track in self._filter_vibe_candidates(results)]
+
+        if not candidate_uris:
+            return [], recommended_artists
+
+        selected_uris = random.sample(candidate_uris, k=min(tracks, len(candidate_uris)))
+        return selected_uris, recommended_artists
+
+    def _filter_vibe_candidates(self, results) -> list[AudioTrack]:
+        """Filter candidate tracks from vibe search results to ensure they are streamable and not too long."""
+        return [candidate for candidate in results.tracks
+                if not candidate.stream and 0 < candidate.duration <= VIBE_MAX_TRACK_DURATION]

@@ -104,7 +104,17 @@ class QueueAddContainer(BaseMusicContainer):
     async def handle_top(self, interaction: discord.Interaction):
         """Handle top button press"""
         await interaction.response.defer()
-        await self.service.move(interaction.guild.id, interaction.user.id, self.result.get("queue_position"), 1)
+        track_id = self.result["track"].extra.get("id")
+        src_position = self.resolve_queue_position(interaction.guild.id, track_id)
+        if src_position == 1:
+            await interaction.message.delete()
+            await interaction.followup.send(
+                embed=self.bot.create_embed("MOCBOT MUSIC", "That track is already at the top of the queue."),
+                ephemeral=True,
+            )
+            return
+
+        await self.service.move(interaction.guild.id, interaction.user.id, src_position, 1)
         await interaction.message.delete()
         track = self.result["track"]
         await interaction.followup.send(
@@ -115,7 +125,9 @@ class QueueAddContainer(BaseMusicContainer):
     async def handle_play_now(self, interaction: discord.Interaction):
         """Handle play now button press"""
         await interaction.response.defer()
-        await self.service.remove(interaction.guild.id, interaction.user.id, self.result.get("queue_position"))
+        track_id = self.result["track"].extra.get("id")
+        queue_position = self.resolve_queue_position(interaction.guild.id, track_id)
+        await self.service.remove(interaction.guild.id, interaction.user.id, queue_position)
         await self.service.play_now(interaction.guild.id, interaction.user.id,
                                     self.result["track"].uri, handle_new_player=False)
         await interaction.message.delete()
@@ -124,7 +136,9 @@ class QueueAddContainer(BaseMusicContainer):
     async def handle_delete(self, interaction: discord.Interaction):
         """Handle delete button press"""
         await interaction.response.defer()
-        await self.service.remove(interaction.guild.id, interaction.user.id, self.result.get("queue_position"))
+        track_id = self.result["track"].extra.get("id")
+        queue_position = self.resolve_queue_position(interaction.guild.id, track_id)
+        await self.service.remove(interaction.guild.id, interaction.user.id, queue_position)
         track = self.result["track"]
         await interaction.message.delete()
         await interaction.followup.send(

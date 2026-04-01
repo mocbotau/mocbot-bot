@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 import discord
+from lib.music.Exceptions import UserError
 
 if TYPE_CHECKING:
     from lib.bot import MOCBOT
@@ -31,6 +32,21 @@ class BaseMusicContainer(discord.ui.Container):
         """Helper to defer and delete the message."""
         await interaction.response.defer(ephemeral=self.ephemeral)
         await interaction.delete_original_response()
+
+    def resolve_queue_position(self, guild_id: int, track_id: str | None) -> int:
+        """Resolve a 1-based queue position from a track ID at interaction time."""
+        if not track_id:
+            raise UserError("This track cannot be modified because it has no queue ID.")
+
+        player = self.service.get_player_by_guild(guild_id)
+        if not player:
+            raise UserError("No active player was found for this server.")
+
+        for queue_position, track in enumerate(player.queue, start=1):
+            if track.extra.get("id") == track_id:
+                return queue_position
+
+        raise UserError("That track is no longer in the queue.")
 
 
 class PaginatedContainer(BaseMusicContainer):
