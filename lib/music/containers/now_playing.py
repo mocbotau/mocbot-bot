@@ -7,9 +7,20 @@ from lib.music.MusicService import MusicService
 from lib.music.containers.base import BaseMusicContainer
 from utils.Music import format_duration
 
+EMPTY_LEFT = "<:progressbaremptyleft:1487774443374776471>"
+FULL_LEFT = "<:progressbarfullleft:1487774452857962537>"
+EMPTY = "<:progressbarempty:1487774441139077243>"
+FULL = "<:progressbarfull:1487774446860107891>"
+CURRENT = "<:progressbarcurrent:1487774439306170398>"
+EMPTY_RIGHT = "<:progressbaremptyright:1487774445060882594>"
+FULL_RIGHT = "<:progressbarfullright:1487774456234512474>"
+
 
 class NowPlayingContainer(BaseMusicContainer):
     """Container displaying the currently playing track with playback controls."""
+
+    REFRESH_INTERVAL = 10
+    PROGRESS_BAR_GRADUATIONS = 12
 
     def __init__(self, service: MusicService, player: DefaultPlayer, track: AudioTrack, bot: MOCBOT):
         super().__init__()
@@ -28,11 +39,6 @@ class NowPlayingContainer(BaseMusicContainer):
                 modifier += " • Looping Queue"
 
         status = "Paused" if player.paused else "Now Playing"
-        duration_text = (
-            "LIVE STREAM"
-            if track.stream
-            else format_duration(track.duration)
-        )
 
         self.add_item(discord.ui.TextDisplay(f"**{status}**")).add_item(
             discord.ui.TextDisplay(f"### [{track.title}]({track.uri})")
@@ -40,12 +46,13 @@ class NowPlayingContainer(BaseMusicContainer):
 
         self.add_item(
             discord.ui.Section(
-                discord.ui.TextDisplay(f"-# Duration\n**{duration_text}**"),
                 discord.ui.TextDisplay(
                     "-# Uploader\n**"
                     + track.author[:40]
                     + ("…" if len(track.author) > 40 else "")
                     + "**"
+                    + "\n\n\n"
+                    + "-# " + self._create_progress_bar(int(player.position), int(track.duration), track.stream)
                 ),
                 accessory=discord.ui.Thumbnail(track.artwork_url),
             )
@@ -138,6 +145,38 @@ class NowPlayingContainer(BaseMusicContainer):
         view = discord.ui.LayoutView(timeout=None)
         view.add_item(new_container)
         return view
+
+    def _create_progress_bar(self, position: int, duration: int, live_stream: bool) -> str:
+        """Create a fixed-width progress bar based on playback position."""
+        if duration <= 0:
+            return EMPTY_LEFT + (EMPTY * (self.PROGRESS_BAR_GRADUATIONS - 1)) + EMPTY_RIGHT
+
+        intervals = duration // self.PROGRESS_BAR_GRADUATIONS
+        if position >= max(0, duration - 5000) or live_stream:  # 5 second buffer at the end to ensure it fills
+            current_interval = self.PROGRESS_BAR_GRADUATIONS
+        else:
+            current_interval = (position // intervals) if intervals > 0 else 0
+
+        current_interval = max(0, min(self.PROGRESS_BAR_GRADUATIONS, current_interval))
+
+        elapsed = format_duration(position)
+        total = "LIVE" if live_stream else format_duration(duration)
+
+        progress_bar = f"{elapsed}\t"
+        progress_bar += EMPTY_LEFT if current_interval == 0 and not live_stream else FULL_LEFT
+
+        for i in range(1, self.PROGRESS_BAR_GRADUATIONS):
+            if i < current_interval:
+                progress_bar += FULL
+            elif i == current_interval:
+                progress_bar += CURRENT
+            else:
+                progress_bar += EMPTY
+
+        progress_bar += FULL_RIGHT if current_interval == self.PROGRESS_BAR_GRADUATIONS else EMPTY_RIGHT
+        progress_bar += f"\t{total}"
+
+        return progress_bar
 
     @message_error_handler(ephemeral=True, followup=True)
     async def handle_prev(self, interaction: discord.Interaction):

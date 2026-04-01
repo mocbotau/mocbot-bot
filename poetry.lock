@@ -1338,17 +1338,6 @@ files = [
 ]
 
 [[package]]
-name = "stringprogressbar"
-version = "1.1.1"
-description = "Simple string progress bar made for discord bots. Its usable everywhere."
-optional = false
-python-versions = "*"
-groups = ["main"]
-files = [
-    {file = "StringProgressBar-1.1.1.tar.gz", hash = "sha256:7636f39e80500fc17d266fbc5f0d18fd3b2cf2c6215f11f2c60295637d401e46"},
-]
-
-[[package]]
 name = "typing-extensions"
 version = "4.13.0"
 description = "Backported and Experimental Type Hints for Python 3.8+"
@@ -1509,4 +1498,4 @@ requests = ">=2.22"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "2aa7bc2b25072c4da7dfe4cba78dacdd586fa51afdb3f2e4056c88a7dcbd6392"
+content-hash = "c510eaf91261ee1839364fb0b93656faafd7b8d45dc9fa77293f9d4a129c0392"

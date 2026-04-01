@@ -29,9 +29,6 @@ class AutoplayService:
 
         self._intent_buffer: dict[int, deque[str]] = {}
 
-        # guild_id -> deque[artist]
-        self._artist_cooldowns: dict[str, deque[str]] = {}
-
     def set_node(self, player: DefaultPlayer):
         """Set the Lavalink node to use for track searches."""
         self.node = player.node
@@ -63,8 +60,7 @@ class AutoplayService:
         await self.ensure_intent_buffer(guild_id)
         artist = self._intent_buffer[guild_id].popleft()
 
-        query = self._build_search_query(artist)
-        track = await self._search_track(query)
+        track = await self._search_track(artist)
 
         return track
 
@@ -80,7 +76,8 @@ class AutoplayService:
         track = current_track
 
         if not is_youtube_url(track.uri):
-            youtube_res = await self.node.get_tracks(f"ytsearch:{track.title} {track.author}")
+            # Using YouTube Music provides better related songs
+            youtube_res = await self.node.get_tracks(f"ytmsearch:{track.title} {track.author}")
             if not youtube_res or not youtube_res.tracks:
                 self.logger.error("Failed to find YouTube version of track: %s", track.title)
                 return None
@@ -104,7 +101,6 @@ class AutoplayService:
         selected_track = random.choice(valid_tracks)
         selected_track.extra["id"] = create_id()
 
-        self.logger.info("Selected related track: %s", selected_track.title)
         return selected_track
 
     async def ensure_intent_buffer(self, guild_id: int):
@@ -119,8 +115,52 @@ class AutoplayService:
             self._intent_buffer[guild_id] = buffer
 
         while len(buffer) < buffer.maxlen:
-            artist = self._choose_artist(guild_id, artists)
+            artist = self._choose_artist(artists)
             buffer.append(artist)
+
+    async def refresh_intent_buffer(self, guild_id: int):
+        """Refresh recommendation cache and rebuild the guild's intent buffer."""
+        self._cache.pop(guild_id, None)
+        self._intent_buffer.pop(guild_id, None)
+        await self.ensure_intent_buffer(guild_id)
+
+    async def sample_recommended_artists(self, guild_id: int, count: int, refresh: bool = False) -> list[str]:
+        """Sample weighted recommended artists for a guild.
+        This is intended for features that need recommendations on-demand.
+        """
+        if count <= 0:
+            return []
+
+        if refresh:
+            self._cache.pop(guild_id, None)
+
+        artists = await self._get_recommendations(guild_id)
+        if not artists:
+            return []
+
+        picked: list[str] = []
+        seen: set[str] = set()
+        attempts = 0
+        max_attempts = max(count * 6, 12)
+
+        while len(picked) < count and attempts < max_attempts:
+            attempts += 1
+            artist = self._choose_artist(artists)
+            if artist in seen:
+                continue
+
+            seen.add(artist)
+            picked.append(artist)
+
+        if len(picked) < count:
+            for artist in [a["artist"] for a in artists]:
+                if artist in seen:
+                    continue
+                picked.append(artist)
+                if len(picked) >= count:
+                    break
+
+        return picked
 
     async def _get_recommendations(self, guild_id: int) -> list[dict]:
         if guild_id not in self._cache:
@@ -144,28 +184,16 @@ class AutoplayService:
             for a in artists
         ]
 
-    def _choose_artist(self, _guild_id: int, artists: list[dict]) -> str:
-        # cooldown = self._artist_cooldowns.setdefault(
-        #     guild_id,
-        #     deque(maxlen=self.artist_cooldown_size),
-        # )
-
-        # candidates = [
-        #     a for a in artists if a["artist"] not in cooldown
-        # ] or artists  # fallback if all are in cooldown
-
+    def _choose_artist(self, artists: list[dict]) -> str:
         choices = [a["artist"] for a in artists]
         weights = [a["p"] for a in artists]
 
         artist = random.choices(choices, weights=weights, k=1)[0]
-        # cooldown.append(artist)
         return artist
 
-    def _build_search_query(self, artist: str) -> str:
-        return f"{artist} official audio"
-
     async def _search_track(self, query: str):
-        results = await self.node.get_tracks(f"ytsearch:{query}")
+        # Using YouTube Music provides better related songs
+        results = await self.node.get_tracks(f"ytmsearch:{query}")
 
         if not results or not results.tracks:
             return None
