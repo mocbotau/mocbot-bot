@@ -71,12 +71,18 @@ class RecentsContainer(PaginatedContainer):
 
             title = track_play.get("Title", "Unknown Title")
             artist = track_play.get("Artist", "Unknown Artist")
+
+            # show requested by getting server recents
+            queued_by = track_play.get("QueuedByUser", {})
+
             # show which server the track was played on if not getting server recents
             guild_name = self.bot.get_guild(track_play.get("GuildID")).name if not self.is_server else ""
             relative_time = datetime.fromisoformat(track_play.get("StartedAt")).timestamp()
 
+            middle_metadata = f' • `{guild_name}`' if guild_name else f' • <@{queued_by}>'
+
             line_text = f"**{track_num}**. [{title} - {artist}]({url})\n"
-            line_text += f"-# {duration}{f' • `{guild_name}`' if guild_name else ''} • <t:{int(relative_time)}:R>"
+            line_text += f"-# {duration}{middle_metadata} • <t:{int(relative_time)}:R>"
 
             add_button = discord.ui.Button(
                 emoji=discord.PartialEmoji(name="plus", id=1461675441097015470),
