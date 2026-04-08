@@ -730,9 +730,11 @@ class Music(commands.Cog):
             queued_msg = (
                 f"Queued **{len(selected_uris)}** tracks from **{mode}** mode."
             )
-
+        
         if not result["was_playing"]:
             player = self.service.get_player_by_guild(interaction.guild.id)
+            autoplay_mode = "Recommended" if recommended else "Related"
+            await self.service.autoplay(interaction.guild.id, interaction.user.id, autoplay_mode)
             await self.handle_new_player(player, interaction=interaction)
         else:
             await send_message(self.bot, interaction, queued_msg, followup=True)
