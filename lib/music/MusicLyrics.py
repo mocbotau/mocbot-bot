@@ -4,6 +4,10 @@ from utils.Pagination import BasePaginationMenu, BasePaginationSource
 class LyricsMenu(BasePaginationMenu):
     """Lyrics pagination menu that extends the base pagination functionality"""
 
+    def __init__(self, source, interaction):
+        """Initialize lyrics menu with no timeout"""
+        super().__init__(source, interaction, timeout=None)
+
     async def send_initial_message(self):
         """Override to use followup for lyrics since interaction might already be responded to"""
         page = await self._source.get_page(0)

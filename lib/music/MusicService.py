@@ -567,13 +567,21 @@ class MusicService:
         asyncio.create_task(self.emitter.emit("player_state_update", player))
 
     async def shuffle(self, guild_id: int, user_id: int) -> None:
-        """Shuffle the current queue."""
+        """Shuffle the current queue, keeping tracks with position at the top as they are being resumed."""
         player = await self.ensure_voice(guild_id, user_id)
 
         if len(player.queue) < 2:
             raise UserError("You need at least 2 tracks in the queue to shuffle.")
 
-        random.shuffle(player.queue)
+        tracks_with_position = [track for track in player.queue if track.position > 0]
+        tracks_without_position = [track for track in player.queue if track.position == 0]
+
+        random.shuffle(tracks_without_position)
+
+        player.queue.clear()
+        player.queue.extend(tracks_with_position)
+        player.queue.extend(tracks_without_position)
+
         asyncio.create_task(self.emitter.emit("queue_update", player))
 
     async def remove(self, guild_id: int, user_id: int, start: int, end: int = None) -> int | SingleTrackResponse:
