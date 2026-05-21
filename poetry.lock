@@ -826,13 +826,13 @@ all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2
 
 [[package]]
 name = "lavalink"
-version = "5.10.0"
+version = "5.11.0"
 description = "A Lavalink WebSocket & API wrapper built around coverage, reliability and performance."
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "lavalink-5.10.0.tar.gz", hash = "sha256:6b364726a4db753dbe398ce4343b7eee20368b84bb6b0092156d08e0b8caf64f"},
+    {file = "lavalink-5.11.0.tar.gz", hash = "sha256:6e3c33614464a4f68e366039fc1e3f256b5d0e26c637c8748a1b61345e1dfa13"},
 ]
 
 [package.dependencies]
@@ -1498,4 +1498,4 @@ requests = ">=2.22"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "c510eaf91261ee1839364fb0b93656faafd7b8d45dc9fa77293f9d4a129c0392"
+content-hash = "1b23cb9290b136b38a5d2858565f9cdb8ec9ad0e7f43c8f64c50aa882f014ce1"

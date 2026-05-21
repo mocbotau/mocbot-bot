@@ -59,6 +59,11 @@ class QueueContainer(PaginatedContainer):
             track_num = idx + 1
             duration = format_duration(track.duration) if not track.stream else "LIVE STREAM"
             requester = f"<@{track.requester}>" if track.requester else self.bot.user.mention
+
+            if hasattr(track, 'position') and track.position > 0:
+                position_formatted = format_duration(track.position)
+                duration = f"{position_formatted}/{duration}"
+
             line_text = f"**{track_num}**. [{track.title}]({track.uri})\n-# {track.author} • {duration} • {requester}"
 
             delete_button = discord.ui.Button(

@@ -147,26 +147,37 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
         """Handle voice state updates"""
-        # If there are no members left in the voice channel, disconnect the bot
-        if member.id != self.bot.user.id:
-            if after.channel is None and before.channel is not None and len(before.channel.members) == 1:
-                # prefer to emit event so all listeners get notified
-                await self.service.emitter.emit(
-                    "player_stopped",
-                    {"player": self.service.get_player_by_guild(before.channel.guild.id), "disconnect": True},
-                )
+        if member.id == self.bot.user.id:
+            # Handle bot moving to new channel gracefully
+            if before.channel and after.channel and before.channel != after.channel:
+                guild_id = member.guild.id
+                player = self.service.get_player_by_guild(guild_id)
+
+                if player and player.is_connected:
+                    if hasattr(member.guild.voice_client, "channel"):
+                        member.guild.voice_client.channel = after.channel
+
+                await self.service.emitter.emit("player_state_update", player)
             return
 
-        # Handle bot moving to new channel gracefully
-        if before.channel and after.channel and before.channel != after.channel:
-            guild_id = member.guild.id
-            player = self.service.get_player_by_guild(guild_id)
+        # Connects or moves to a new channel should not trigger disconnect logic
+        if after.channel is not None or before.channel is None:
+            return
 
-            if player and player.is_connected:
-                if hasattr(member.guild.voice_client, "channel"):
-                    member.guild.voice_client.channel = after.channel
+        guild = before.channel.guild
 
-            await self.service.emitter.emit("player_state_update", player)
+        # Check if bot is connected to the channel the user left, if not ignore
+        if not guild.voice_client or guild.voice_client.channel != before.channel:
+            return
+
+        # Only disconnect if only the bot remains
+        if len(before.channel.members) != 1:
+            return
+
+        await self.service.emitter.emit(
+            "player_stopped",
+            {"player": self.service.get_player_by_guild(guild.id), "disconnect": True},
+        )
 
     async def update_now_playing(self, guild: Guild, player: DefaultPlayer):
         """Update the now playing message for a guild"""
@@ -730,7 +741,7 @@ class Music(commands.Cog):
             queued_msg = (
                 f"Queued **{len(selected_uris)}** tracks from **{mode}** mode."
             )
-        
+
         if not result["was_playing"]:
             player = self.service.get_player_by_guild(interaction.guild.id)
             autoplay_mode = "Recommended" if recommended else "Related"
