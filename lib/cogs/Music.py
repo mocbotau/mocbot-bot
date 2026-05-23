@@ -725,7 +725,7 @@ class Music(commands.Cog):
 
         result = await self.service.play_tracks(
             guild_id=interaction.guild.id,
-            user_id=interaction.user.id,
+            user_id=self.bot.user.id,
             queries=selected_uris,
             handle_new_player=False,
         )
