@@ -42,10 +42,12 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
-      - MUSIC
       - WEB
       - TV
+      - MWEB
+      - ANDROID_VR
       - TVHTML5_SIMPLY
+      - WEBEMBEDDED
   lavasrc:
     providers:
       - 'ytsearch:"%ISRC%"'
