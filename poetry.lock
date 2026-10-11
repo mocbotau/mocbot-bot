@@ -826,13 +826,13 @@ all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2
 
 [[package]]
 name = "lavalink"
-version = "5.11.0"
+version = "5.11.1"
 description = "A Lavalink WebSocket & API wrapper built around coverage, reliability and performance."
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "lavalink-5.11.0.tar.gz", hash = "sha256:6e3c33614464a4f68e366039fc1e3f256b5d0e26c637c8748a1b61345e1dfa13"},
+    {file = "lavalink-5.11.1.tar.gz", hash = "sha256:995945373f897b34bda77287b9ec02d203c6e8bba497135d24654558f615e9b7"},
 ]
 
 [package.dependencies]
@@ -1482,14 +1482,14 @@ propcache = ">=0.2.0"
 
 [[package]]
 name = "ytmusicapi"
-version = "1.11.1"
+version = "1.12.3"
 description = "Unofficial API for YouTube Music"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "ytmusicapi-1.11.1-py3-none-any.whl", hash = "sha256:bcaf208fd18c9b5b8971bc4436b17af132a4296de98708049d7638fdba90f6c9"},
-    {file = "ytmusicapi-1.11.1.tar.gz", hash = "sha256:364a1b457fa28f85f7fdd9cd8fe16b2d34a98e93cbd1358e31a01fdd5a93a3b9"},
+    {file = "ytmusicapi-1.12.3-py3-none-any.whl", hash = "sha256:f65db840907a43ca23b29bd563951a1e390fbe2089d7aa4ddbe2043824b2acd9"},
+    {file = "ytmusicapi-1.12.3.tar.gz", hash = "sha256:be81511af7494eec8e5970c56a10e51aada6253246649e4ea6714fd6aeb654ee"},
 ]
 
 [package.dependencies]
@@ -1498,4 +1498,4 @@ requests = ">=2.22"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "1b23cb9290b136b38a5d2858565f9cdb8ec9ad0e7f43c8f64c50aa882f014ce1"
+content-hash = "0a5a9997d85c3c916be35f5444947ca67534025a6f4f899a80af0268f1303a4b"
